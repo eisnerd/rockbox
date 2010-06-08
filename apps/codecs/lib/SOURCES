@@ -1,0 +1,29 @@
+#if CONFIG_CODEC == SWCODEC /* software codec platforms */
+codeclib.c
+fixedpoint.c
+
+/* OLD MDCT */
+/* (when all other codecs are remediated this can be remoed) */
+mdct2.c
+mdct_lookup.c
+
+fft-ffmpeg.c
+mdct.c
+
+#ifdef CPU_ARM
+mdct_arm.S
+setjmp_arm.S
+../../../firmware/target/arm/support-arm.S
+#endif
+
+#ifdef CPU_COLDFIRE
+setjmp_cf.S
+#endif
+
+#ifdef CPU_MIPS
+setjmp_mips.S
+#endif
+
+#elif defined(SIMULATOR) && defined(__APPLE__)
+osx.dummy.c
+#endif
