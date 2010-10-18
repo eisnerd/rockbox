@@ -52,7 +52,7 @@ int button_read_device(void)
 #endif
 
     /* device buttons */
-    if (!hold_button)
+    if (!hold_button || !(GPIOG_INPUT_VAL & 0x01))
     {
         if ( (GPIOB_INPUT_VAL & 0x20)) btn |= BUTTON_POWER;
         if (!(GPIOG_INPUT_VAL & 0x10)) btn |= BUTTON_UP;
@@ -60,7 +60,7 @@ int button_read_device(void)
         if (!(GPIOI_INPUT_VAL & 0x04)) btn |= BUTTON_LEFT;
         if (!(GPIOG_INPUT_VAL & 0x02)) btn |= BUTTON_RIGHT;
         if (!(GPIOL_INPUT_VAL & 0x04)) btn |= BUTTON_SELECT;
-        if (!(GPIOG_INPUT_VAL & 0x01)) btn |= BUTTON_REC;
+        if (!(GPIOG_INPUT_VAL & 0x01) && !hold_button) btn |= BUTTON_REC;
         if (!(GPIOL_INPUT_VAL & 0x10)) btn |= BUTTON_VOL_UP;
         if (!(GPIOL_INPUT_VAL & 0x20)) btn |= BUTTON_VOL_DOWN;
     }
