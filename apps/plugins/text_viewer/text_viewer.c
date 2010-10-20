@@ -21,11 +21,12 @@
  *
  ****************************************************************************/
 #include "plugin.h"
+#include "lib/pluginlib_exit.h"
 #include "tv_action.h"
 #include "tv_button.h"
 #include "tv_preferences.h"
 
-PLUGIN_HEADER
+
 
 enum plugin_status plugin_start(const void* file)
 {
@@ -35,22 +36,33 @@ enum plugin_status plugin_start(const void* file)
     long old_tick;
     bool done = false;
     bool display_update = true;
+    size_t size;
+    unsigned char *plugin_buf;
 
     old_tick = *rb->current_tick;
 
     if (!file)
         return PLUGIN_ERROR;
 
-    if (!tv_init(file)) {
+    /* get the plugin buffer */
+    plugin_buf = rb->plugin_get_buffer(&size);
+
+    if (!tv_init_action(&plugin_buf, &size)) {
+        rb->splash(HZ, "Error initialize");
+        return PLUGIN_ERROR;
+    }
+
+    if (!tv_load_file(file)) {
         rb->splash(HZ, "Error opening file");
         return PLUGIN_ERROR;
     }
 
-#if LCD_DEPTH > 1
-    rb->lcd_set_backdrop(NULL);
-#endif
-
+    atexit(tv_exit);
     while (!done) {
+#ifdef HAVE_LCD_BITMAP
+        if (preferences->statusbar)
+            rb->send_event(GUI_EVENT_ACTIONUPDATE, NULL);
+#endif
 
         if (display_update)
             tv_draw();
@@ -69,10 +81,12 @@ enum plugin_status plugin_start(const void* file)
 
                     if (res != TV_MENU_RESULT_EXIT_MENU)
                     {
-                        tv_exit(NULL);
-                        done = true;
                         if (res == TV_MENU_RESULT_ATTACHED_USB)
                             return PLUGIN_USB_CONNECTED;
+                        else if (res == TV_MENU_RESULT_ERROR)
+                            return PLUGIN_ERROR;
+                        else
+                            done = true;
                     }
                 }
                 break;
@@ -183,7 +197,6 @@ enum plugin_status plugin_start(const void* file)
 #ifdef TV_QUIT2
             case TV_QUIT2:
 #endif
-                tv_exit(NULL);
                 done = true;
                 break;
 
@@ -192,9 +205,7 @@ enum plugin_status plugin_start(const void* file)
                 break;
 
             default:
-                if (rb->default_event_handler_ex(button, tv_exit, NULL)
-                    == SYS_USB_CONNECTED)
-                    return PLUGIN_USB_CONNECTED;
+                exit_on_usb(button);
                 display_update = false;
                 break;
         }

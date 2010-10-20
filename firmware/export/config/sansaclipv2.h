@@ -116,7 +116,7 @@
 /* The number of bytes reserved for loadable plugins */
 #define PLUGIN_BUFFER_SIZE 0x80000
 
-#define AB_REPEAT_ENABLE 1
+#define AB_REPEAT_ENABLE
 
 /* FM Tuner */
 #define CONFIG_TUNER SI4700 /* in fact SI4702 */
@@ -160,6 +160,9 @@
 #define CURRENT_NORMAL     24
 #define CURRENT_BACKLIGHT  15
 #define CURRENT_RECORD     11
+
+/* maximum charging current */
+#define CURRENT_MAX_CHG   150
 
 /* Define this to the CPU frequency */
 #define CPU_FREQ      240000000

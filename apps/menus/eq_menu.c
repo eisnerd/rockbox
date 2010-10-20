@@ -45,6 +45,7 @@
 #include "gui/scrollbar.h"
 #include "menu_common.h"
 #include "viewport.h"
+#include "exported_menus.h"
 
 /*
  * Utility functions
@@ -385,9 +386,8 @@ bool eq_menu_graphical(void)
     bool has_changed = false;
     int button;
     int *setting;
-    int current_band, x, y, step, fast_step, min, max, voice_unit;
+    int current_band, x, y, step, fast_step, min, max;
     enum eq_slider_mode mode;
-    enum eq_type current_type;
     char buf[24];
     int i, w, h, height, start_item, nb_eq_sliders[NB_SCREENS];
     FOR_NB_SCREENS(i)
@@ -419,7 +419,6 @@ bool eq_menu_graphical(void)
     
     /* Start off editing gain on the first band */
     mode = GAIN;
-    current_type = LOW_SHELF;
     current_band = 0;
     
     while (!exit_request) {
@@ -437,7 +436,6 @@ bool eq_menu_graphical(void)
                 fast_step = EQ_GAIN_FAST_STEP;
                 min = EQ_GAIN_MIN;
                 max = EQ_GAIN_MAX;
-                voice_unit = UNIT_DB;
             
                 snprintf(buf, sizeof(buf), str(LANG_SYSFONT_EQUALIZER_EDIT_MODE),
                          str(LANG_SYSFONT_GAIN), "(dB)");
@@ -452,7 +450,6 @@ bool eq_menu_graphical(void)
                 fast_step = EQ_CUTOFF_FAST_STEP;
                 min = EQ_CUTOFF_MIN;
                 max = EQ_CUTOFF_MAX;
-                voice_unit = UNIT_HERTZ;
 
                 snprintf(buf, sizeof(buf), str(LANG_SYSFONT_EQUALIZER_EDIT_MODE),
                          str(LANG_SYSFONT_EQUALIZER_BAND_CUTOFF), "(Hz)");
@@ -467,7 +464,6 @@ bool eq_menu_graphical(void)
                 fast_step = EQ_Q_FAST_STEP;
                 min = EQ_Q_MIN;
                 max = EQ_Q_MAX;
-                voice_unit = UNIT_INT;
 
                 snprintf(buf, sizeof(buf), str(LANG_SYSFONT_EQUALIZER_EDIT_MODE),
                          str(LANG_EQUALIZER_BAND_Q), "");
@@ -594,18 +590,15 @@ static bool eq_save_preset(void)
 }
 
 /* Allows browsing of preset files */
-bool eq_browse_presets(void)
-{
-    return rockbox_browse(EQS_DIR, SHOW_CFG);
-}
+static struct browse_folder_info eqs = { EQS_DIR, SHOW_CFG };
 
 MENUITEM_FUNCTION(eq_graphical, 0, ID2P(LANG_EQUALIZER_GRAPHICAL),
                     (int(*)(void))eq_menu_graphical, NULL, lowlatency_callback, 
                     Icon_EQ);
 MENUITEM_FUNCTION(eq_save, 0, ID2P(LANG_EQUALIZER_SAVE),
                     (int(*)(void))eq_save_preset, NULL, NULL, Icon_NOICON);
-MENUITEM_FUNCTION(eq_browse, 0, ID2P(LANG_EQUALIZER_BROWSE),
-                    (int(*)(void))eq_browse_presets, NULL, lowlatency_callback,
+MENUITEM_FUNCTION(eq_browse, MENU_FUNC_USEPARAM, ID2P(LANG_EQUALIZER_BROWSE),
+                    browse_folder, (void*)&eqs, lowlatency_callback,
                     Icon_NOICON);
 
 MAKE_MENU(equalizer_menu, ID2P(LANG_EQUALIZER), NULL, Icon_EQ,

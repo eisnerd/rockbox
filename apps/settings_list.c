@@ -215,8 +215,12 @@ static const char graphic_numeric[] = "graphic,numeric";
   #define DEFAULT_FONTNAME "12-Adobe-Helvetica"
 #elif LCD_HEIGHT <= 320
   #define DEFAULT_FONTNAME "15-Adobe-Helvetica"
+#elif LCD_HEIGHT <= 400
+  #define DEFAULT_FONTNAME "16-Adobe-Helvetica"
+#elif LCD_HEIGHT <= 480
+  #define DEFAULT_FONTNAME "27-Adobe-Helvetica"
 #else
-  #define DEFAULT_FONTNAME "12-Adobe-Helvetica"
+  #define DEFAULT_FONTNAME "35-Adobe-Helvetica"
 #endif
 
 #else
@@ -759,7 +763,15 @@ const struct settings_list settings[] = {
 #endif
                   "max files in dir", UNIT_INT, 50, 10000, 50,
                   NULL, NULL, NULL),
-#if BATTERY_CAPACITY_INC > 0
+/* use this setting for user code even if there's no exchangable battery
+ * support enabled */
+#ifdef BATTERY_CAPACITY_DEFAULT
+/* define min/max/inc for this file if there's only one battery */
+#ifndef BATTERY_CAPACITY_MIN
+#define BATTERY_CAPACITY_MIN BATTERY_CAPACITY_DEFAULT
+#define BATTERY_CAPACITY_MAX BATTERY_CAPACITY_DEFAULT
+#define BATTERY_CAPACITY_INC 0
+#endif
     INT_SETTING(0, battery_capacity, LANG_BATTERY_CAPACITY,
                 BATTERY_CAPACITY_DEFAULT, "battery capacity", UNIT_MAH,
                 BATTERY_CAPACITY_MIN, BATTERY_CAPACITY_MAX,
@@ -946,6 +958,7 @@ const struct settings_list settings[] = {
                     UNIT_SEC, 3, 254, 1, NULL, NULL, storage_spindown),
 #endif /* HAVE_DISK_STORAGE */
     /* browser */
+    TEXT_SETTING(0, start_directory, "start directory", "/", NULL, NULL),
     CHOICE_SETTING(0, dirfilter, LANG_FILTER, SHOW_SUPPORTED, "show files",
                    "all,supported,music,playlists", NULL, 4, ID2P(LANG_ALL),
                    ID2P(LANG_FILTER_SUPPORTED), ID2P(LANG_FILTER_MUSIC),
@@ -987,6 +1000,8 @@ const struct settings_list settings[] = {
                    ID2P(LANG_SET_BOOL_NO), ID2P(LANG_SET_BOOL_YES),
                    ID2P(LANG_ASK), ID2P(LANG_BOOKMARK_SETTINGS_RECENT_ONLY_YES),
                    ID2P(LANG_BOOKMARK_SETTINGS_RECENT_ONLY_ASK)),
+    OFFON_SETTING(0, autoupdatebookmark, LANG_BOOKMARK_SETTINGS_AUTOUPDATE,
+                   false, "autoupdate bookmarks", NULL),
     CHOICE_SETTING(0, autoloadbookmark, LANG_BOOKMARK_SETTINGS_AUTOLOAD,
                    BOOKMARK_NO, "autoload bookmarks", off_on_ask, NULL, 3,
                    ID2P(LANG_SET_BOOL_NO), ID2P(LANG_SET_BOOL_YES),
@@ -1357,9 +1372,11 @@ const struct settings_list settings[] = {
     OFFON_SETTING(F_SOUNDSETTING, dithering_enabled, LANG_DITHERING, false,
                   "dithering enabled", dsp_dither_enable),
 
+#ifdef HAVE_PITCHSCREEN
     /* timestretch */
     OFFON_SETTING(F_SOUNDSETTING, timestretch_enabled, LANG_TIMESTRETCH, false,
                   "timestretch enabled", dsp_timestretch_enable),
+#endif
 
     /* compressor */
     INT_SETTING_NOWRAP(F_SOUNDSETTING, compressor_threshold,

@@ -40,6 +40,7 @@
 #include "appevents.h"
 #include "viewport.h"
 #include "statusbar-skinned.h"
+#include "skin_engine/skin_engine.h"
 
 #if LCD_DEPTH > 1
 /**
@@ -49,7 +50,7 @@ static int clear_main_backdrop(void)
 {
     global_settings.backdrop_file[0] = '-';
     global_settings.backdrop_file[1] = '\0';
-    sb_set_backdrop(SCREEN_MAIN, NULL);
+    skin_backdrop_load_setting();
     viewportmanager_theme_enable(SCREEN_MAIN, false, NULL);
     viewportmanager_theme_undo(SCREEN_MAIN, true);
     settings_save();
@@ -85,19 +86,22 @@ static struct colour_info
  */
 static int set_color_func(void* color)
 {
-    int res, c = (intptr_t)color, banned_color=-1;
-    
+    int res, c = (intptr_t)color, banned_color=-1, old_color;
     /* Don't let foreground be set the same as background and vice-versa */
     if (c == COLOR_BG)
         banned_color = *colors[COLOR_FG].setting;
     else if (c == COLOR_FG)
         banned_color = *colors[COLOR_BG].setting;
 
+    old_color = *colors[c].setting;
     res = (int)set_color(&screens[SCREEN_MAIN],str(colors[c].lang_id),
                          colors[c].setting, banned_color);
-    settings_save();
-    settings_apply(false);
-    settings_apply_skins();
+    if (old_color != *colors[c].setting)
+    {
+        settings_save();
+        settings_apply(false);
+        settings_apply_skins();
+    }
     return res;
 }
 
@@ -111,6 +115,7 @@ static int reset_color(void)
     
     settings_save();
     settings_apply(false);
+    settings_apply_skins();
     return 0;
 }
 MENUITEM_FUNCTION(set_bg_col, MENU_FUNC_USEPARAM, ID2P(LANG_BACKGROUND_COLOR),
@@ -241,9 +246,11 @@ static struct browse_folder_info themes = {THEME_DIR, SHOW_CFG};
 
 int browse_folder(void *param)
 {
+    char path[MAX_PATH];
     const struct browse_folder_info *info =
         (const struct browse_folder_info*)param;
-    return rockbox_browse(info->dir, info->show_options);
+    return rockbox_browse(get_user_file_path(info->dir, 0, path, sizeof(path)),
+                          info->show_options);
 }
 
 #ifdef HAVE_LCD_BITMAP

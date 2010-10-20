@@ -30,8 +30,10 @@
 #include <QLabel>
 #include <QMap>
 #include <QWheelEvent>
+#include <QTimer>
 
 #include "tabcontent.h"
+#include "codeeditor.h"
 
 namespace Ui {
     class ConfigDocument;
@@ -58,6 +60,8 @@ public:
     QString title() const;
 
     QString toPlainText() const;
+    void syncFromBoxes();
+    void syncFromText();
 
     void save();
     void saveAs();
@@ -73,10 +77,25 @@ signals:
 private slots:
     void deleteClicked();
     void addClicked();
+    void boxesChanged();
     void textChanged();
+    void contentsChanged();
+    void blockUpdates()
+    {
+        block = true;
+        QTimer::singleShot(20, this, SLOT(unblockUpdates()));
+    }
+    void unblockUpdates(){ block = false; }
+    void buttonChecked();
 
+    void connectPrefs(PreferencesDialog *prefs);
+
+public slots:
+    void settingsChanged();
 
 private:
+    void addRow(QString key, QString value);
+
     Ui::ConfigDocument *ui;
     QList<QHBoxLayout*> containers;
     QList<NoScrollCombo*> keys;
@@ -90,7 +109,9 @@ private:
     QString filePath;
     QString saved;
 
-    void addRow(QString key, QString value);
+    CodeEditor* editor;
+
+    bool block;
 };
 
 #endif // CONFIGDOCUMENT_H

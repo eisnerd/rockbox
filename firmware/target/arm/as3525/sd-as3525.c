@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "gcc_extensions.h"
 #include "as3525.h"
 #include "pl180.h"  /* SD controller */
 #include "pl081.h"  /* DMA controller */
@@ -45,15 +46,21 @@
 #include "ata_idle_notify.h"
 #include "sd.h"
 #include "usb.h"
+/*#define LOGF_ENABLE*/
+#include "logf.h"
 
 #ifdef HAVE_HOTSWAP
 #include "disk.h"
 #endif
 
+//#define VERIFY_WRITE 1
+
 /* command flags */
 #define MCI_NO_RESP     (0<<0)
 #define MCI_RESP        (1<<0)
 #define MCI_LONG_RESP   (1<<1)
+#define MCI_ACMD        (1<<2)
+#define MCI_NOCRC       (1<<3)
 
 /* ARM PL180 registers */
 #define MCI_POWER(i)       (*(volatile unsigned char *) (pl180_base[i]+0x00))
@@ -208,6 +215,10 @@ static bool send_cmd(const int drive, const int cmd, const int arg,
     unsigned cmd_retries = 6;
     while(cmd_retries--)
     {
+        if ((flags & MCI_ACMD) && /* send SD_APP_CMD before each try */
+            !send_cmd(drive, SD_APP_CMD, card_info[drive].rca, MCI_RESP, response))
+            return false;
+
         /* Clear old status flags */
         MCI_CLEAR(drive) = 0x7ff;
 
@@ -234,8 +245,21 @@ static bool send_cmd(const int drive, const int cmd, const int arg,
         {
             response[0] = MCI_RESP0(drive); /* Always prepare short response */
 
-            if(status & MCI_RESPONSE_ERROR) /* timeout or crc failure */
+            if(status & MCI_RESPONSE_ERROR) {/* timeout or crc failure */
+                if ((status & MCI_CMD_CRC_FAIL) &&
+                    (flags & MCI_NOCRC))
+                    break;
+                logf("sd cmd error: drive %d cmd %d arg %08x sd_status %08x resp0 %08lx",
+                     drive, cmd, arg, status, response[0]);
                 continue;
+            }
+
+            if((flags & MCI_RESP) &&
+               !(flags & MCI_LONG_RESP) &&
+               (response[0] & SD_R1_CARD_ERROR)) {
+                logf("sd card error: drive %d cmd %d arg %08x r1 %08lx",
+                     drive, cmd, arg, response[0]);
+            }
 
             if(status & MCI_CMD_RESP_END)   /* Response passed CRC check */
             {
@@ -266,6 +290,8 @@ static int sd_init_card(const int drive)
     long init_timeout;
     bool sd_v2 = false;
 
+    card_info[drive].rca = 0;
+
     /* MCLCK on and set to 400kHz ident frequency  */
     MCI_CLOCK(drive) = MCI_IDENTSPEED;
 
@@ -291,12 +317,9 @@ static int sd_init_card(const int drive)
         if(TIME_AFTER(current_tick, init_timeout))
             return -2;
 
-        /* app_cmd */
-        send_cmd(drive, SD_APP_CMD, 0, MCI_RESP, &response);
-
         /* ACMD41 For v2 cards set HCS bit[30] & send host voltage range to all */
         send_cmd(drive, SD_APP_OP_COND, (0x00FF8000 | (sd_v2 ? 1<<30 : 0)),
-                        MCI_RESP, &card_info[drive].ocr);
+                        MCI_ACMD|MCI_NOCRC|MCI_RESP, &card_info[drive].ocr);
 
     } while(!(card_info[drive].ocr & (1<<31)));
 
@@ -360,21 +383,15 @@ static int sd_init_card(const int drive)
     if(!send_cmd(drive, SD_SELECT_CARD, card_info[drive].rca, MCI_RESP, &response))
         return -10;
 
-#if 0 /* FIXME : it seems that write corrupts the filesystem */
+#if 0 /* FIXME : it seems that reading fails on some models */
     /*  Switch to to 4 bit widebus mode  */
     if(sd_wait_for_tran_state(drive) < 0)
         return -11;
-    /* CMD55 */             /*  Response is requested due to timing issue  */
-    if(!send_cmd(drive, SD_APP_CMD, card_info[drive].rca, MCI_RESP, &response))
-        return -14;
     /* ACMD42  */
-    if(!send_cmd(drive, SD_SET_CLR_CARD_DETECT, 0, MCI_RESP, &response))
+    if(!send_cmd(drive, SD_SET_CLR_CARD_DETECT, 0, MCI_ACMD|MCI_RESP, &response))
         return -15;
-    /* CMD55 */              /*  Response is requested due to timing issue  */
-    if(!send_cmd(drive, SD_APP_CMD, card_info[drive].rca, MCI_RESP, &response))
-        return -12;
     /* ACMD6  */
-    if(!send_cmd(drive, SD_SET_BUS_WIDTH, 2, MCI_RESP, &response))
+    if(!send_cmd(drive, SD_SET_BUS_WIDTH, 2, MCI_ACMD|MCI_RESP, &response))
         return -13;
     /* Now that card is widebus make controller aware */
     MCI_CLOCK(drive) |= MCI_CLOCK_WIDEBUS;
@@ -416,7 +433,7 @@ static int sd_init_card(const int drive)
     return 0;
 }
 
-static void sd_thread(void) __attribute__((noreturn));
+static void sd_thread(void) NORETURN_ATTR;
 static void sd_thread(void)
 {
     struct queue_event ev;
@@ -547,11 +564,11 @@ int sd_init(void)
             |   (AS3525_IDE_DIV << 2)
             |    AS3525_CLK_PLLA;       /* clock source = PLLA */
 
-    CGU_PERI |= CGU_NAF_CLOCK_ENABLE;
+    bitset32(&CGU_PERI, CGU_NAF_CLOCK_ENABLE);
 #ifdef HAVE_MULTIDRIVE
-    CGU_PERI |= CGU_MCI_CLOCK_ENABLE;
-    CCU_IO &= ~(1<<3);           /* bits 3:2 = 01, xpd is SD interface */
-    CCU_IO |= (1<<2);
+    bitset32(&CGU_PERI, CGU_MCI_CLOCK_ENABLE);
+    bitclr32(&CCU_IO, 1<<3);    /* bits 3:2 = 01, xpd is SD interface */
+    bitset32(&CCU_IO, 1<<2);
 #endif
 
     wakeup_init(&transfer_completion_signal);
@@ -652,9 +669,9 @@ static int sd_select_bank(signed char bank)
         dma_retain();
         /* we don't use the uncached buffer here, because we need the
          * physical memory address for DMA transfers */
-        dma_enable_channel(0, aligned_buffer, MCI_FIFO(INTERNAL_AS3525),
-            DMA_PERI_SD, DMAC_FLOWCTRL_PERI_MEM_TO_PERI, true, false, 0, DMA_S8,
-            NULL);
+        dma_enable_channel(0, AS3525_PHYSICAL_ADDR(&aligned_buffer[0]),
+            MCI_FIFO(INTERNAL_AS3525), DMA_PERI_SD,
+            DMAC_FLOWCTRL_PERI_MEM_TO_PERI, true, false, 0, DMA_S8, NULL);
 
         MCI_DATA_TIMER(INTERNAL_AS3525) = SD_MAX_WRITE_TIMEOUT;
         MCI_DATA_LENGTH(INTERNAL_AS3525) = 512;
@@ -686,9 +703,9 @@ static int sd_transfer_sectors(IF_MD2(int drive,) unsigned long start,
 #endif
     int ret = 0;
     unsigned loops = 0;
+    unsigned long response;
     bool aligned = !((uintptr_t)buf & (CACHEALIGN_SIZE - 1));
 
-    mutex_lock(&sd_mtx);
     sd_enable(true);
     led(true);
 
@@ -719,11 +736,11 @@ static int sd_transfer_sectors(IF_MD2(int drive,) unsigned long start,
     dma_retain();
 
     if(aligned)
-    {
+    {   /* direct transfer, indirect is always uncached */
         if(write)
-            clean_dcache_range(buf, count * SECTOR_SIZE);
+            commit_dcache_range(buf, count * SECTOR_SIZE);
         else
-            dump_dcache_range(buf, count * SECTOR_SIZE);
+            discard_dcache_range(buf, count * SECTOR_SIZE);
     }
 
     while(count)
@@ -773,7 +790,7 @@ static int sd_transfer_sectors(IF_MD2(int drive,) unsigned long start,
         }
         else
         {
-            dma_buf = aligned_buffer;
+            dma_buf = AS3525_PHYSICAL_ADDR(&aligned_buffer[0]);
             if(transfer > UNALIGNED_NUM_SECTORS)
                 transfer = UNALIGNED_NUM_SECTORS;
 
@@ -788,7 +805,7 @@ static int sd_transfer_sectors(IF_MD2(int drive,) unsigned long start,
             goto sd_transfer_error;
         }
 
-        if(!send_cmd(drive, cmd, bank_start, MCI_NO_RESP, NULL))
+        if(!send_cmd(drive, cmd, bank_start, MCI_RESP, &response))
         {
             ret -= 3*20;
             goto sd_transfer_error;
@@ -828,6 +845,13 @@ static int sd_transfer_sectors(IF_MD2(int drive,) unsigned long start,
         /*  Wait for FIFO to empty, card may still be in PRG state for writes */
         while(MCI_STATUS(drive) & MCI_TX_ACTIVE);
 
+        /*
+         * If the write aborted early due to a tx underrun, disable the
+         * dma channel here, otherwise there are still 4 words in the fifo
+         * and the retried write will get corrupted.
+         */
+        dma_disable_channel(0);
+
         last_disk_activity = current_tick;
 
         if(!send_cmd(drive, SD_STOP_TRANSMISSION, 0, MCI_RESP, &status))
@@ -862,20 +886,66 @@ sd_transfer_error_nodma:
     if (ret)    /* error */
         card_info[drive].initialized = 0;
 
-    mutex_unlock(&sd_mtx);
     return ret;
 }
 
 int sd_read_sectors(IF_MD2(int drive,) unsigned long start, int count,
                      void* buf)
 {
-    return sd_transfer_sectors(IF_MD2(drive,) start, count, buf, false);
+    int ret;
+
+    mutex_lock(&sd_mtx);
+    ret = sd_transfer_sectors(IF_MD2(drive,) start, count, buf, false);
+    mutex_unlock(&sd_mtx);
+
+    return ret;
 }
 
 int sd_write_sectors(IF_MD2(int drive,) unsigned long start, int count,
                      const void* buf)
 {
-    return sd_transfer_sectors(IF_MD2(drive,) start, count, (void*)buf, true);
+#ifdef VERIFY_WRITE
+    unsigned long saved_start = start;
+    int saved_count = count;
+    void *saved_buf = (void*)buf;
+#endif
+    int ret;
+
+    mutex_lock(&sd_mtx);
+
+    ret = sd_transfer_sectors(IF_MD2(drive,) start, count, (void*)buf, true);
+
+#ifdef VERIFY_WRITE
+    if (ret) {
+        /* write failed, no point in verifying */
+        mutex_unlock(&sd_mtx);
+        return ret;
+    }
+
+    count = saved_count;
+    buf = saved_buf;
+    start = saved_start;
+    while (count) {
+        int transfer = count;
+        if(transfer > UNALIGNED_NUM_SECTORS)
+            transfer = UNALIGNED_NUM_SECTORS;
+
+        sd_transfer_sectors(IF_MD2(drive,) start, transfer, aligned_buffer, false);
+        if (memcmp(buf, aligned_buffer, transfer * 512) != 0) {
+            /* try the write again in the hope to repair the damage */
+            sd_transfer_sectors(IF_MD2(drive,) saved_start, saved_count, saved_buf, true);
+            panicf("sd: verify failed: sec=%ld n=%d!", start, transfer);
+        }
+
+        buf   += transfer * 512;
+        count -= transfer;
+        start += transfer;
+    }
+#endif
+
+    mutex_unlock(&sd_mtx);
+
+    return ret;
 }
 
 long sd_last_disk_activity(void)
@@ -903,7 +973,7 @@ void sd_enable(bool on)
 #if defined(HAVE_BUTTON_LIGHT) && defined(HAVE_MULTIDRIVE)
         /* buttonlight AMSes need a bit of special handling for the buttonlight
          * here due to the dual mapping of GPIOD and XPD */
-        CCU_IO |= (1<<2);              /* XPD is SD-MCI interface (b3:2 = 01) */
+        bitset32(&CCU_IO, 1<<2);    /* XPD is SD-MCI interface (b3:2 = 01) */
         if (buttonlight_is_on)
             GPIOD_DIR &= ~(1<<7);
         else
@@ -929,7 +999,7 @@ void sd_enable(bool on)
 #endif  /* defined(HAVE_HOTSWAP) && defined (HAVE_ADJUSTABLE_CPU_VOLTAGE) */
 
 #if defined(HAVE_BUTTON_LIGHT) && defined(HAVE_MULTIDRIVE)
-        CCU_IO &= ~(1<<2);           /* XPD is general purpose IO (b3:2 = 00) */
+        bitclr32(&CCU_IO, 1<<2);    /* XPD is general purpose IO (b3:2 = 00) */
         if (buttonlight_is_on)
             _buttonlight_on();
 #endif

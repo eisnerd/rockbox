@@ -28,14 +28,15 @@
 #include "rbrenderinfo.h"
 #include "rbimage.h"
 #include "rbfont.h"
-
-class RBViewport;
+#include "rbalbumart.h"
+#include "rbviewport.h"
 
 class RBScreen : public QGraphicsItem
 {
 
 public:
-    RBScreen(const RBRenderInfo& info, QGraphicsItem *parent = 0);
+    RBScreen(const RBRenderInfo& info, bool remote = false,
+             QGraphicsItem *parent = 0);
     virtual ~RBScreen();
 
     QPainterPath shape() const;
@@ -46,11 +47,12 @@ public:
     int getWidth() const{ return width; }
     int getHeight() const{ return height; }
 
-    void loadViewport(QString name, RBViewport* view)
-    {
-        namedViewports.insert(name, view);
-    }
+    void loadViewport(QString name, RBViewport* view);
     void showViewport(QString name);
+    bool viewPortDisplayed(QString name)
+    {
+        return displayedViewports.contains(name);
+    }
 
     void loadImage(QString name, RBImage* image)
     {
@@ -63,14 +65,42 @@ public:
     RBFont* getFont(int id);
 
     void setBackdrop(QString filename);
+    bool hasBackdrop(){ return backdrop != 0; }
     void makeCustomUI(QString id);
+    void setCustomUI(RBViewport* viewport){ customUI = viewport; }
+    RBViewport* getCustomUI(){ return customUI; }
 
     static QColor stringToColor(QString str, QColor fallback);
 
+    QColor foreground(){ return fgColor; }
+    QColor background(){ return bgColor; }
+
+    void setAlbumArt(RBAlbumArt* art){ albumArt = art; }
+    void showAlbumArt(RBViewport* view)
+    {
+        if(albumArt)
+        {
+            albumArt->setParentItem(view);
+            albumArt->show();
+            albumArt->enableMove();
+        }
+    }
+
+    void setDefault(RBViewport* view){ defaultView = view; }
+    void endSbsRender();
+    void breakSBS();
+
+    void RtlMirror(){ ax = true; }
+    bool isRtlMirrored(){ bool ret = ax; ax = false; return ret; }
+
+protected:
+    void hoverMoveEvent(QGraphicsSceneHoverEvent *event);
 
 private:
     int width;
     int height;
+    int fullWidth;
+    int fullHeight;
     QColor bgColor;
     QColor fgColor;
     QPixmap* backdrop;
@@ -78,11 +108,19 @@ private:
 
     ProjectModel* project;
 
-    QMap<QString, RBViewport*> namedViewports;
+    QMap<QString, QList<RBViewport*>*> namedViewports;
     QMap<QString, RBImage*> images;
     QMap<QString, QString>* settings;
     QMap<int, RBFont*> fonts;
+    QList<QString> displayedViewports;
 
+    RBAlbumArt* albumArt;
+    RBViewport* customUI;
+    RBViewport* defaultView;
+
+    QList<QGraphicsItem*> sbsChildren;
+
+    bool ax;
 };
 
 #endif // RBSCREEN_H

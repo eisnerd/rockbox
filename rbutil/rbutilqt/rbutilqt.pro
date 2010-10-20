@@ -32,10 +32,10 @@ RCC_DIR = $$MYBUILDDIR/rcc
 
 
 # check version of Qt installation
-VER = $$find(QT_VERSION, ^4\.[5-9]+.*)
+VER = $$find(QT_VERSION, ^4\\.[5-9]+.*)
 isEmpty(VER) {
+    message("Qt >= 4.5 required!")
     !isEmpty(QT_VERSION) error("Qt found:" $$[QT_VERSION])
-    error("Qt >= 4.3 required!")
 }
 message("Qt version used:" $$VER)
 
@@ -51,9 +51,24 @@ message("Rockbox Base dir: "$$RBBASE_DIR)
 mac {
     RBLIBPOSTFIX = -universal
 }
+# check for system speex. Add a custom rule for pre-building librbspeex if not
+# found. Newer versions of speex are split up into libspeex and libspeexdsp,
+# and some distributions package them separately. Check for both and fall back
+# to librbspeex if not found.
+# NOTE: keep adding the linker option after -lrbspeex, otherwise linker errors
+# occur if the linker defaults to --as-needed
+# (see http://www.gentoo.org/proj/en/qa/asneeded.xml)
+#
+# Always use our own copy when building statically. Don't search for libspeex
+# on Mac, since we don't deploy statically there.
+!static:unix:!mac {
+    LIBSPEEX = $$system(pkg-config --silence-errors --libs speex speexdsp)
+}
+
 rbspeex.commands = @$(MAKE) \
         TARGET_DIR=$$MYBUILDDIR -C $$RBBASE_DIR/tools/rbspeex \
-        librbspeex$$RBLIBPOSTFIX CC=\"$$QMAKE_CC\"
+        librbspeex$$RBLIBPOSTFIX CC=\"$$QMAKE_CC\" \
+        SYS_SPEEX=\"$$LIBSPEEX\"
 libucl.commands = @$(MAKE) \
         TARGET_DIR=$$MYBUILDDIR -C $$RBBASE_DIR/tools/ucl/src \
         libucl$$RBLIBPOSTFIX CC=\"$$QMAKE_CC\"
@@ -91,13 +106,7 @@ DEPENDPATH = $$INCLUDEPATH
 
 LIBS += -L$$OUT_PWD -L$$MYBUILDDIR -lrbspeex -lmkamsboot -lmktccboot -lmkmpioboot -lucl
 
-# check for system speex. Add a custom rule for pre-building librbspeex if not
-# found. Newer versions of speex are split up into libspeex and libspeexdsp,
-# and some distributions package them separately. Check for both and fall back
-# to librbspeex if not found.
-# NOTE: keep this after -lrbspeex, otherwise linker errors occur if the linker
-# defaults to --as-needed (see http://www.gentoo.org/proj/en/qa/asneeded.xml)
-LIBSPEEX = $$system(pkg-config --silence-errors --libs speex speexdsp)
+# Add a (possibly found) libspeex now, don't do this before -lrbspeex!
 !static:!isEmpty(LIBSPEEX) {
     LIBS += $$LIBSPEEX
 }
@@ -123,25 +132,41 @@ DEFINES += RBUTIL _LARGEFILE64_SOURCE
 win32 {
     LIBS += -lsetupapi -lnetapi32
 }
-unix:!static:!libusb1 {
+win32:static {
+    QMAKE_LFLAGS += -static-libgcc -static-libstdc++
+}
+unix:!static:!libusb1:!macx {
     LIBS += -lusb
 }
-unix:!static:libusb1 {
+unix:!static:libusb1:!macx {
     DEFINES += LIBUSB1
     LIBS += -lusb-1.0
 }
+unix {
+    # explicitly link zlib, we do need it. Don't rely on implicit linking via Qt.
+    LIBS += -lz
+}
 
-unix:static {
+unix:!macx:static {
     # force statically linking of libusb. Libraries that are appended
     # later will get linked dynamically again.
     LIBS += -Wl,-Bstatic -lusb -Wl,-Bdynamic
 }
 
-macx {
-    QMAKE_MAC_SDK=/Developer/SDKs/MacOSX10.4u.sdk
+# if -config intel is specified use 10.5 SDK and don't build for PPC
+macx:!intel {
+    CONFIG += ppc
     QMAKE_LFLAGS_PPC=-mmacosx-version-min=10.4 -arch ppc
     QMAKE_LFLAGS_X86=-mmacosx-version-min=10.4 -arch i386
-    CONFIG+=x86 ppc
+    QMAKE_MAC_SDK=/Developer/SDKs/MacOSX10.4u.sdk
+}
+macx:intel {
+    QMAKE_LFLAGS_X86=-mmacosx-version-min=10.5 -arch i386
+    QMAKE_MAC_SDK=/Developer/SDKs/MacOSX10.5.sdk
+    QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.5
+}
+macx {
+    CONFIG += x86
     LIBS += -L/usr/local/lib -lz \
             -framework IOKit -framework CoreFoundation -framework Carbon \
             -framework SystemConfiguration -framework CoreServices

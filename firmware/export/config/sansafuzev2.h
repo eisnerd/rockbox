@@ -118,10 +118,10 @@
 /* The number of bytes reserved for loadable plugins */
 #define PLUGIN_BUFFER_SIZE 0x80000
 
-#define AB_REPEAT_ENABLE 1
+#define AB_REPEAT_ENABLE
 
 /* FM Tuner - suspected to be the SI4702 */
-#define CONFIG_TUNER SI4700
+#define CONFIG_TUNER (SI4700|RDA5802)
 /* #define HAVE_TUNER_PWR_CTRL */
 
 /* Define this for LCD backlight available */
@@ -167,6 +167,9 @@
 #define CURRENT_NORMAL     26
 #define CURRENT_BACKLIGHT  30
 #define CURRENT_RECORD     CURRENT_NORMAL
+
+/* maximum charging current */
+#define CURRENT_MAX_CHG   200
 
 /* Define this to the CPU frequency */
 #define CPU_FREQ      240000000

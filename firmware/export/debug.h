@@ -21,7 +21,8 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
-#include "../include/_ansi.h"
+#include "config.h"
+#include "gcc_extensions.h"
 
 extern void debug_init(void);
 extern void debugf(const char* fmt,...) ATTRIBUTE_PRINTF(1, 2);
@@ -32,7 +33,8 @@ extern void ldebugf(const char* file, int line, const char *fmt, ...)
 #ifdef __GNUC__
 
 /*  */
-#if defined(SIMULATOR) && !defined(__PCTOOL__)
+#if defined(SIMULATOR) && !defined(__PCTOOL__) \
+    || ((CONFIG_PLATFORM & PLATFORM_ANDROID) && defined(DEBUG))
 #define DEBUGF  debugf
 #define LDEBUGF(...) ldebugf(__FILE__, __LINE__, __VA_ARGS__)
 #else

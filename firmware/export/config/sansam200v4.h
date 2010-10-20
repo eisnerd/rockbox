@@ -81,7 +81,7 @@
 /* The number of bytes reserved for loadable plugins */
 #define PLUGIN_BUFFER_SIZE 0x10000
 
-#define AB_REPEAT_ENABLE 1
+#define AB_REPEAT_ENABLE
 
 #define CONFIG_TUNER TEA5767
 #define CONFIG_TUNER_XTAL 32768
@@ -140,6 +140,7 @@
 #define USE_ROCKBOX_USB
 #define USB_VENDOR_ID 0x0781
 #define USB_PRODUCT_ID 0x7431
+#define HAVE_USB_HID_MOUSE
 
 #define CONFIG_LCD LCD_SSD1815
 

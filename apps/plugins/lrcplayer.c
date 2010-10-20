@@ -24,7 +24,7 @@
 #include "lib/helper.h"
 #include <ctype.h>
 
-PLUGIN_HEADER
+
 
 #define MAX_LINE_LEN    256
 #define LRC_BUFFER_SIZE 0x3000 /* 12 kiB */
@@ -36,7 +36,7 @@ PLUGIN_HEADER
 /* #define LRC_DEBUG */
 
 enum lrc_screen {
-    PLUGIN_OTHER = 10,
+    PLUGIN_OTHER = 0x200,
     LRC_GOTO_MAIN,
     LRC_GOTO_MENU,
     LRC_GOTO_EDITOR,
@@ -415,6 +415,24 @@ static const char *lrc_skip_space(const char *str)
     return str;
 }
 
+#ifdef HAVE_LCD_BITMAP
+static bool isbrchr(const unsigned char *str, int len)
+{
+    const unsigned char *p = "!,-.:;?　、。！，．：；？―";
+    if (isspace(*str))
+        return true;
+
+    while(*p)
+    {
+        int n = rb->utf8seek(p, 1);
+        if (len == n && !rb->strncmp(p, str, len))
+            return true;
+        p += n;
+    }
+    return false;
+}
+#endif
+
 /* calculate how many lines is needed to display and store it.
  * create cache if there is enough space in lrc_buffer. */
 static struct lrc_brpos *calc_brpos(struct lrc_line *lrc_line, int i)
@@ -518,17 +536,28 @@ static struct lrc_brpos *calc_brpos(struct lrc_line *lrc_line, int i)
             w = 1;
 #else
             c = ((long)rb->utf8decode(cr.str, &ch) - (long)cr.str);
-            w = rb->font_get_width(pf, ch);
-            if (cr.count && isspace(*cr.str))
+            if (rb->is_diacritic(ch, NULL))
+                w = 0;
+            else
+                w = rb->font_get_width(pf, ch);
+            if (cr.count && prefs.wrap && isbrchr(cr.str, c))
             {
                 /* remember position of last space */
                 rb->memcpy(&sp, &cr, sizeof(struct snap));
                 sp.word_count = lrc_word->count;
                 sp.word_width = lrc_word->width;
+                if (!isspace(*cr.str) && cr.width+w <= vp_lyrics[i].width)
+                {
+                    sp.count += c;
+                    sp.width += w;
+                    sp.word_count += c;
+                    sp.word_width += w;
+                    sp.str += c;
+                }
             }
             if (cr.count && cr.width+w > vp_lyrics[i].width)
             {
-                if (prefs.wrap && sp.str != NULL) /* wrap */
+                if (sp.str != NULL) /* wrap */
                 {
                     rb->memcpy(&cr, &sp, sizeof(struct snap));
                     lrc_word = lrc_line->words+cr.nword;
@@ -1632,7 +1661,7 @@ static void display_time(void)
 static inline void set_to_default(struct screen *display)
 {
 #if (LCD_DEPTH > 1)
-#ifdef HAVE_LCD_REMOTE
+#ifdef HAVE_REMOTE_LCD
     if (display->screen_type != SCREEN_REMOTE)
 #endif
         display->set_foreground(prefs.active_color);
@@ -1642,7 +1671,7 @@ static inline void set_to_default(struct screen *display)
 static inline void set_to_active(struct screen *display)
 {
 #if (LCD_DEPTH > 1)
-#ifdef HAVE_LCD_REMOTE
+#ifdef HAVE_REMOTE_LCD
     if (display->screen_type == SCREEN_REMOTE)
         display->set_drawmode(DRMODE_INVERSEVID);
     else
@@ -1658,7 +1687,7 @@ static inline void set_to_active(struct screen *display)
 static inline void set_to_inactive(struct screen *display)
 {
 #if (LCD_DEPTH > 1)
-#ifdef HAVE_LCD_REMOTE
+#ifdef HAVE_REMOTE_LCD
     if (display->screen_type != SCREEN_REMOTE)
 #endif
         display->set_foreground(prefs.inactive_color);
@@ -1690,14 +1719,14 @@ static int display_lrc_line(struct lrc_line *lrc_line, int ypos, int i)
         if (current.wipe && active_line && len >= 3500)
         {
             elapsed = rin * vp_lyrics[i].width / len;
+            set_to_inactive(display);
+            display->fillrect(elapsed, ypos+font_ui_height/4+1,
+                 vp_lyrics[i].width-elapsed-1, font_ui_height/2-2);
             set_to_active(display);
             display->drawrect(0, ypos+font_ui_height/4,
                               vp_lyrics[i].width, font_ui_height/2);
             display->fillrect(1, ypos+font_ui_height/4+1,
                               elapsed-1, font_ui_height/2-2);
-            set_to_inactive(display);
-            display->fillrect(elapsed, ypos+font_ui_height/4+1,
-                 vp_lyrics[i].width-elapsed-1, font_ui_height/2-2);
             set_to_default(display);
         }
         return ypos + font_ui_height;
@@ -1767,7 +1796,7 @@ static int display_lrc_line(struct lrc_line *lrc_line, int ypos, int i)
                 display->fillrect(xpos+elapsed, ypos,
                                   w-elapsed, font_ui_height);
 #if (LCD_DEPTH > 1)
-#ifdef HAVE_LCD_REMOTE
+#ifdef HAVE_REMOTE_LCD
                 if (display->screen_type == SCREEN_REMOTE)
                     display->set_drawmode(DRMODE_INVERSEVID);
                 else
@@ -1959,14 +1988,7 @@ static void save_changes(void)
     if (!current.changed_lrc)
         return;
     rb->splash(HZ/2, "Saving changes...");
-    if (current.type > NUM_TYPES)
-    {
-        /* save changes to new .lrc8 file */
-        rb->strcpy(new_file, current.lrc_file);
-        p = rb->strrchr(new_file, '.');
-        rb->strcpy(p, extentions[LRC8]);
-    }
-    else if (current.type == TXT)
+    if (current.type == TXT || current.type > NUM_TYPES)
     {
         /* save changes to new .lrc file */
         rb->strcpy(new_file, current.lrc_file);
@@ -1994,7 +2016,10 @@ static void save_changes(void)
         }
         current.offset = 0;
         if (current.type > NUM_TYPES)
+        {
             curr = -1;
+            rb->write(fd, BOM, BOM_SIZE);
+        }
         else
             size = rb->filesize(fe);
         while (curr < size)
@@ -2005,8 +2030,7 @@ static void save_changes(void)
                 temp_lrc; temp_lrc = temp_lrc->next)
             {
                 offset = temp_lrc->file_offset;
-                if (offset == -1 ||
-                    (offset < next && temp_lrc->old_time_start == -1))
+                if (offset < next && temp_lrc->old_time_start == -1)
                 {
                     lrc_line = temp_lrc;
                     next = offset;
@@ -2014,7 +2038,7 @@ static void save_changes(void)
                 }
             }
             offset = current.offset_file_offset;
-            if (offset >= curr && offset < next)
+            if (offset >= 0 && offset < next)
             {
                 lrc_line = NULL;
                 next = offset;
@@ -2073,14 +2097,9 @@ static void save_changes(void)
 
     if (success)
     {
-        if (current.type == TXT)
+        if (current.type == TXT || current.type > NUM_TYPES)
         {
             current.type = LRC;
-            rb->strcpy(current.lrc_file, new_file);
-        }
-        else if (current.type > NUM_TYPES)
-        {
-            current.type = LRC8;
             rb->strcpy(current.lrc_file, new_file);
         }
         else
@@ -2299,7 +2318,7 @@ static bool lrc_theme_menu(void)
 #endif
                         "Display Time",
 #ifdef HAVE_LCD_COLOR
-                        "Inactive Color",
+                        "Inactive Colour",
 #endif
                         "Backlight Force On");
 
@@ -2320,7 +2339,7 @@ static bool lrc_theme_menu(void)
                 break;
 #ifdef HAVE_LCD_COLOR
             case LRC_MENU_INACTIVE_COLOR:
-                usb = rb->set_color(NULL, "Inactive Color",
+                usb = rb->set_color(NULL, "Inactive Colour",
                                     &prefs.inactive_color, -1);
                 break;
 #endif
@@ -2353,11 +2372,11 @@ static bool lrc_display_menu(void)
     bool exit = false, usb = false;
 
     MENUITEM_STRINGLIST(menu, "Display Settings", NULL,
-                        "Wrap", "Wipe", "Align",
+                        "Wrap", "Wipe", "Alignment",
                         "Activate Only Current Line");
 
     struct opt_items align_names[] = {
-        {"Left", -1}, {"Center", -1}, {"Right", -1},
+        {"Left", -1}, {"Centre", -1}, {"Right", -1},
     };
 
     while (!exit && !usb)
@@ -2371,7 +2390,7 @@ static bool lrc_display_menu(void)
                 usb = rb->set_bool("Wipe", &prefs.wipe);
                 break;
             case LRC_MENU_ALIGN:
-                usb = rb->set_option("Align", &prefs.align, INT,
+                usb = rb->set_option("Alignment", &prefs.align, INT,
                                      align_names, 3, NULL);
                 break;
             case LRC_MENU_LINE_MODE:
@@ -2915,14 +2934,15 @@ enum plugin_status plugin_start(const void* parameter)
             return PLUGIN_ERROR;
         }
         ext = rb->strrchr(current.lrc_file, '.');
-        for (current.type = 0; ext && current.type < NUM_TYPES; current.type++)
+        if (!ext) ext = current.lrc_file;
+        for (current.type = 0; current.type < NUM_TYPES; current.type++)
         {
-            if (!rb->strcmp(ext, extentions[current.type]))
+            if (!rb->strcasecmp(ext, extentions[current.type]))
                 break;
         }
-        if (!ext || current.type == NUM_TYPES)
+        if (current.type == NUM_TYPES)
         {
-            rb->splashf(HZ, "%s is not supported", ext? ext: current.lrc_file);
+            rb->splashf(HZ, "%s is not supported", ext);
             return PLUGIN_ERROR;
         }
         current.found_lrc = true;

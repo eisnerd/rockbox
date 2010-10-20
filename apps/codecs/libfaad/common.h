@@ -51,6 +51,25 @@ extern struct codec_api* ci;
 #define LOGF(...)
 #endif
 
+#if   (CONFIG_CPU == MCF5250) || defined(CPU_S5L870X)
+/* Enough IRAM but performance suffers with ICODE_ATTR. */
+#define IBSS_ATTR_FAAD_LARGE_IRAM   IBSS_ATTR
+#define ICODE_ATTR_FAAD_LARGE_IRAM
+#define ICONST_ATTR_FAAD_LARGE_IRAM ICONST_ATTR
+
+#elif (CONFIG_CPU == PP5022) || (CONFIG_CPU == PP5024)
+/* Enough IRAM to move additional data and code to it. */
+#define IBSS_ATTR_FAAD_LARGE_IRAM   IBSS_ATTR
+#define ICODE_ATTR_FAAD_LARGE_IRAM  ICODE_ATTR
+#define ICONST_ATTR_FAAD_LARGE_IRAM ICONST_ATTR
+
+#else
+/* Not enough IRAM available. */
+#define IBSS_ATTR_FAAD_LARGE_IRAM
+#define ICODE_ATTR_FAAD_LARGE_IRAM
+#define ICONST_ATTR_FAAD_LARGE_IRAM
+#endif
+
 #define INLINE __inline
 #if 0 //defined(_WIN32) && !defined(_WIN32_WCE)
 #define ALIGN __declspec(align(16))
@@ -71,15 +90,10 @@ extern struct codec_api* ci;
 /* #define USE_DOUBLE_PRECISION */
 /* use fixed point reals */
 #define FIXED_POINT
-//#define BIG_IQ_TABLE
+#define BIG_IQ_TABLE /* BIG_IQ_TABLE results in faster requantization */
 
 /* Use if target platform has address generators with autoincrement */
 //#define PREFER_POINTERS
-
-#ifdef _WIN32_WCE
-#define FIXED_POINT
-#endif
-
 
 #define ERROR_RESILIENCE
 
@@ -148,9 +162,11 @@ extern struct codec_api* ci;
 #ifdef FIXED_POINT
 #define DIV_R(A, B) (((int64_t)A << REAL_BITS)/B)
 #define DIV_C(A, B) (((int64_t)A << COEF_BITS)/B)
+#define DIV_Q(A, B) (((int64_t)A << Q2_BITS  )/B)
 #else
 #define DIV_R(A, B) ((A)/(B))
 #define DIV_C(A, B) ((A)/(B))
+#define DIV_Q(A, B) ((A)/(B))
 #endif
 
 #ifndef SBR_LOW_POWER
@@ -269,9 +285,10 @@ char *strchr(), *strrchr();
 
   #include <math.h>
 
-  #define MUL_R(A,B) ((A)*(B))
-  #define MUL_C(A,B) ((A)*(B))
-  #define MUL_F(A,B) ((A)*(B))
+  #define MUL_R(A,B)  ((A)*(B))
+  #define MUL_C(A,B)  ((A)*(B))
+  #define MUL_F(A,B)  ((A)*(B))
+  #define MUL_Q2(A,B) ((A)*(B))
 
   /* Complex multiplication */
   static INLINE void ComplexMult(real_t *y1, real_t *y2,
@@ -290,9 +307,10 @@ char *strchr(), *strrchr();
 
   typedef float real_t;
 
-  #define MUL_R(A,B) ((A)*(B))
-  #define MUL_C(A,B) ((A)*(B))
-  #define MUL_F(A,B) ((A)*(B))
+  #define MUL_R(A,B)  ((A)*(B))
+  #define MUL_C(A,B)  ((A)*(B))
+  #define MUL_F(A,B)  ((A)*(B))
+  #define MUL_Q2(A,B) ((A)*(B))
 
   #define REAL_CONST(A) ((real_t)(A))
   #define COEF_CONST(A) ((real_t)(A))
@@ -307,7 +325,7 @@ char *strchr(), *strrchr();
       *y2 = MUL_F(x2, c1) - MUL_F(x1, c2);
   }
 
-
+/* rockbox: must be commented to build for non-FP
   #if defined(_WIN32) && !defined(__MINGW32__)
     #define HAS_LRINTF
     static INLINE int lrintf(float f)
@@ -334,7 +352,7 @@ char *strchr(), *strrchr();
         return i;
     }
   #endif
-
+*/
 
   #ifdef __ICL /* only Intel C compiler has fmath ??? */
 

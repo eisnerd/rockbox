@@ -113,7 +113,7 @@
 /* The number of bytes reserved for loadable plugins */
 #define PLUGIN_BUFFER_SIZE 0x10000
 
-#define AB_REPEAT_ENABLE 1
+#define AB_REPEAT_ENABLE
 
 /* FM Tuner */
 #define CONFIG_TUNER SI4700 /* in fact SI4702 but let's hope it's compatible */
@@ -154,9 +154,12 @@
 /* #define HAVE_POWEROFF_WHILE_CHARGING */
 
 /* define current usage levels (based on battery bench) */
-#define CURRENT_NORMAL     42
+#define CURRENT_NORMAL     37
 #define CURRENT_BACKLIGHT  13
 #define CURRENT_RECORD     CURRENT_NORMAL
+
+/* maximum charging current */
+#define CURRENT_MAX_CHG   150
 
 /* Define this to the CPU frequency */
 #define CPU_FREQ      248000000
@@ -172,6 +175,7 @@
 #define USE_ROCKBOX_USB
 #define USB_VENDOR_ID 0x0781
 #define USB_PRODUCT_ID 0x7433
+#define HAVE_USB_HID_MOUSE
 
 /* Define this if you have adjustable CPU frequency */
 #define HAVE_ADJUSTABLE_CPU_FREQ

@@ -39,6 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "string-extra.h"
+#include "gcc_extensions.h"
 
 char* strncpy(char *, const char *, size_t);
 void* plugin_get_buffer(size_t *buffer_size);
@@ -52,6 +53,7 @@ void* plugin_get_buffer(size_t *buffer_size);
 #include "thread.h"
 #include "button.h"
 #include "action.h"
+#include "load_code.h"
 #include "usb.h"
 #include "font.h"
 #include "lcd.h"
@@ -65,6 +67,7 @@ void* plugin_get_buffer(size_t *buffer_size);
 #include "profile.h"
 #endif
 #include "misc.h"
+#include "filefuncs.h"
 #if (CONFIG_CODEC == SWCODEC)
 #include "dsp.h"
 #include "codecs.h"
@@ -144,17 +147,21 @@ void* plugin_get_buffer(size_t *buffer_size);
 #define PLUGIN_MAGIC 0x526F634B /* RocK */
 
 /* increase this every time the api struct changes */
-#define PLUGIN_API_VERSION 187
+#define PLUGIN_API_VERSION 194
 
 /* update this to latest version if a change to the api struct breaks
    backwards compatibility (and please take the opportunity to sort in any
    new function which are "waiting" at the end of the function table) */
-#define PLUGIN_MIN_API_VERSION 187
+#define PLUGIN_MIN_API_VERSION 194
 
 /* plugin return codes */
+/* internal returns start at 0x100 to make exit(1..255) work */
+#define INTERNAL_PLUGIN_RETVAL_START 0x100
 enum plugin_status {
-    PLUGIN_OK = 0,
-    PLUGIN_USB_CONNECTED,
+    PLUGIN_OK = 0, /* PLUGIN_OK == EXIT_SUCCESS */
+    /* 1...255 reserved for exit() */
+    PLUGIN_USB_CONNECTED = INTERNAL_PLUGIN_RETVAL_START,
+    PLUGIN_POWEROFF,
     PLUGIN_GOTO_WPS,
     PLUGIN_ERROR = -1,
 };
@@ -176,7 +183,9 @@ struct plugin_api {
     void (*lcd_clear_display)(void);
     int  (*lcd_getstringsize)(const unsigned char *str, int *w, int *h);
     void (*lcd_putsxy)(int x, int y, const unsigned char *string);
+    void (*lcd_putsxyf)(int x, int y, const unsigned char *fmt, ...);
     void (*lcd_puts)(int x, int y, const unsigned char *string);
+    void (*lcd_putsf)(int x, int y, const unsigned char *fmt, ...);
     void (*lcd_puts_scroll)(int x, int y, const unsigned char* string);
     void (*lcd_stop_scroll)(void);
 #ifdef HAVE_LCD_CHARCELLS
@@ -445,12 +454,13 @@ struct plugin_api {
     int (*mkdir)(const char *name);
     int (*rmdir)(const char *name);
     bool (*dir_exists)(const char *path);
+    struct dirinfo (*dir_get_info)(DIR* parent, struct dirent *entry);
 
     /* kernel/ system */
-#ifdef CPU_ARM
+#if defined(CPU_ARM) && CONFIG_PLATFORM & PLATFORM_NATIVE
     void (*__div0)(void);
 #endif
-    void (*sleep)(int ticks);
+    unsigned (*sleep)(unsigned ticks);
     void (*yield)(void);
     volatile long* current_tick;
     long (*default_event_handler)(long event);
@@ -489,10 +499,16 @@ struct plugin_api {
     void (*trigger_cpu_boost)(void);
     void (*cancel_cpu_boost)(void);
 #endif
-#if NUM_CORES > 1
+
     void (*cpucache_flush)(void);
     void (*cpucache_invalidate)(void);
-#endif
+
+    /* load code api for overlay */
+    void* (*lc_open)(const char *filename, unsigned char *buf, size_t buf_size);
+    void* (*lc_open_from_mem)(void* addr, size_t blob_size);
+    void* (*lc_get_header)(void *handle);
+    void  (*lc_close)(void *handle);
+
     bool (*timer_register)(int reg_prio, void (*unregister_callback)(void),
                            long cycles, void (*timer_callback)(void)
                            IF_COP(, int core));
@@ -667,8 +683,8 @@ struct plugin_api {
 #if !defined(SIMULATOR) && (CONFIG_CODEC != SWCODEC)
     unsigned long (*mpeg_get_last_header)(void);
 #endif
-#if (CONFIG_CODEC == MAS3587F) || (CONFIG_CODEC == MAS3539F) || \
-    (CONFIG_CODEC == SWCODEC)
+#if ((CONFIG_CODEC == MAS3587F) || (CONFIG_CODEC == MAS3539F) || \
+     (CONFIG_CODEC == SWCODEC)) && defined (HAVE_PITCHSCREEN)
     void (*sound_set_pitch)(int32_t pitch);
 #endif
 
@@ -762,10 +778,6 @@ struct plugin_api {
     void* (*plugin_get_audio_buffer)(size_t *buffer_size);
     void (*plugin_tsr)(bool (*exit_callback)(bool reenter));
     char* (*plugin_get_current_filename)(void);
-#ifdef PLUGIN_USE_IRAM
-    void (*plugin_iram_init)(char *iramstart, char *iramcopy, size_t iram_size,
-                             char *iedata, size_t iedata_size);
-#endif
 #if defined(DEBUG) || defined(SIMULATOR)
     void (*debugf)(const char *fmt, ...) ATTRIBUTE_PRINTF(1, 2);
 #endif
@@ -782,12 +794,10 @@ struct plugin_api {
     const char *(*get_codec_filename)(int cod_spec);
     void ** (*find_array_ptr)(void **arr, void *ptr);
     int (*remove_array_ptr)(void **arr, void *ptr);
-#if defined(HAVE_RECORDING) && (defined(HAVE_LINE_IN) || defined(HAVE_MIC_IN))
-int (*round_value_to_list32)(unsigned long value,
-                             const unsigned long list[],
-                             int count,
-                             bool signd);
-#endif
+    int (*round_value_to_list32)(unsigned long value,
+                                 const unsigned long list[],
+                                 int count,
+                                 bool signd);
 #endif /* CONFIG_CODEC == SWCODEC */
     bool (*get_metadata)(struct mp3entry* id3, int fd, const char* trackname);
     bool (*mp3info)(struct mp3entry *entry, const char *filename);
@@ -869,7 +879,7 @@ int (*round_value_to_list32)(unsigned long value,
                            int tag, char *buf, long size);
     void (*tagcache_search_finish)(struct tagcache_search *tcs);
     long (*tagcache_get_numeric)(const struct tagcache_search *tcs, int tag);
-#ifdef HAVE_TC_RAMCACHE
+#if defined(HAVE_TC_RAMCACHE) && defined(HAVE_DIRCACHE)
     bool (*tagcache_fill_tags)(struct mp3entry *id3, const char *filename);
 #endif
 #endif
@@ -886,17 +896,14 @@ int (*round_value_to_list32)(unsigned long value,
 #endif
 
     const char *rbversion;
+
     /* new stuff at the end, sort into place next time
        the API gets incompatible */
 };
 
 /* plugin header */
 struct plugin_header {
-    unsigned long magic;
-    unsigned short target_id;
-    unsigned short api_version;
-    unsigned char *load_addr;
-    unsigned char *end_addr;
+    struct lc_header lc_hdr; /* must be the first */
     enum plugin_status(*entry_point)(const void*);
     const struct plugin_api **api;
 };
@@ -909,41 +916,20 @@ extern unsigned char plugin_end_addr[];
         const struct plugin_api *rb DATA_ATTR; \
         const struct plugin_header __header \
         __attribute__ ((section (".header")))= { \
-        PLUGIN_MAGIC, TARGET_ID, PLUGIN_API_VERSION, \
-        plugin_start_addr, plugin_end_addr, plugin_start, &rb };
+        { PLUGIN_MAGIC, TARGET_ID, PLUGIN_API_VERSION, \
+        plugin_start_addr, plugin_end_addr }, plugin__start, &rb };
 #else /* PLATFORM_HOSTED */
 #define PLUGIN_HEADER \
         const struct plugin_api *rb DATA_ATTR; \
         const struct plugin_header __header \
         __attribute__((visibility("default"))) = { \
-        PLUGIN_MAGIC, TARGET_ID, PLUGIN_API_VERSION, \
-        NULL, NULL, plugin_start, &rb };
+        { PLUGIN_MAGIC, TARGET_ID, PLUGIN_API_VERSION, NULL, NULL }, \
+        plugin__start, &rb };
 #endif /* CONFIG_PLATFORM */
-
-#ifdef PLUGIN_USE_IRAM
-/* Declare IRAM variables */
-#define PLUGIN_IRAM_DECLARE \
-    extern char iramcopy[]; \
-    extern char iramstart[]; \
-    extern char iramend[]; \
-    extern char iedata[]; \
-    extern char iend[];
-/* Initialize IRAM */
-#define PLUGIN_IRAM_INIT(api) \
-    (api)->plugin_iram_init(iramstart, iramcopy, iramend-iramstart, \
-                            iedata, iend-iedata);
-#else
-#define PLUGIN_IRAM_DECLARE
-#define PLUGIN_IRAM_INIT(api)
-#endif /* PLUGIN_USE_IRAM */
 #endif /* PLUGIN */
 
 int plugin_load(const char* plugin, const void* parameter);
 void* plugin_get_audio_buffer(size_t *buffer_size);
-#ifdef PLUGIN_USE_IRAM
-void plugin_iram_init(char *iramstart, char *iramcopy, size_t iram_size,
-                      char *iedata, size_t iedata_size);
-#endif
 
 /* plugin_tsr,
     callback returns true to allow the new plugin to load,
@@ -952,7 +938,7 @@ void plugin_tsr(bool (*exit_callback)(bool reenter));
 
 /* defined by the plugin */
 extern const struct plugin_api *rb;
-enum plugin_status plugin_start(const void* parameter)
+enum plugin_status plugin__start(const void* parameter)
     NO_PROF_ATTR;
 
 #endif /* __PCTOOL__ */

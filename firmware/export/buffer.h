@@ -24,7 +24,12 @@
 #include "config.h"
 /* defined in linker script */
 #if (CONFIG_PLATFORM & PLATFORM_NATIVE)
+#if defined(IPOD_VIDEO)
+extern unsigned char *audiobufend_lds[];
+unsigned char *audiobufend;
+#else
 extern unsigned char audiobufend[];
+#endif
 #else
 extern unsigned char *audiobufend;
 #endif
@@ -33,5 +38,9 @@ extern unsigned char *audiobuf;
 
 void buffer_init(void) INIT_ATTR;
 void *buffer_alloc(size_t size);
+
+#ifdef BUFFER_ALLOC_DEBUG
+void buffer_alloc_check(char *name);
+#endif
 
 #endif

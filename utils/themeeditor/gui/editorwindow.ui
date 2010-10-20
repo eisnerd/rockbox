@@ -47,14 +47,29 @@
     <property name="title">
      <string>&amp;File</string>
     </property>
+    <widget class="QMenu" name="menuRecent_Files">
+     <property name="title">
+      <string>Recent Files</string>
+     </property>
+    </widget>
+    <widget class="QMenu" name="menuRecent_Projects">
+     <property name="title">
+      <string>Recent Projects</string>
+     </property>
+    </widget>
     <addaction name="actionNew_Document"/>
+    <addaction name="actionNew_Project"/>
     <addaction name="actionOpen_Document"/>
     <addaction name="actionOpen_Project"/>
+    <addaction name="menuRecent_Files"/>
+    <addaction name="menuRecent_Projects"/>
     <addaction name="separator"/>
     <addaction name="actionClose_Document"/>
+    <addaction name="actionClose_Project"/>
     <addaction name="separator"/>
     <addaction name="actionSave_Document"/>
     <addaction name="actionSave_Document_As"/>
+    <addaction name="actionExport_Project"/>
     <addaction name="separator"/>
     <addaction name="actionPreferences"/>
     <addaction name="separator"/>
@@ -69,8 +84,23 @@
     <addaction name="actionFile_Panel"/>
     <addaction name="separator"/>
     <addaction name="actionDevice_Configuration"/>
+    <addaction name="actionTimer"/>
+   </widget>
+   <widget class="QMenu" name="menuEdit">
+    <property name="title">
+     <string>&amp;Edit</string>
+    </property>
+    <addaction name="actionUndo"/>
+    <addaction name="actionRedo"/>
+    <addaction name="separator"/>
+    <addaction name="actionCut"/>
+    <addaction name="actionCopy"/>
+    <addaction name="actionPaste"/>
+    <addaction name="separator"/>
+    <addaction name="actionFind_Replace"/>
    </widget>
    <addaction name="menuFile"/>
+   <addaction name="menuEdit"/>
    <addaction name="menuView"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
@@ -99,9 +129,6 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
-   <addaction name="actionToolbarNew"/>
-   <addaction name="actionToolbarOpen"/>
-   <addaction name="actionToolbarSave"/>
   </widget>
   <widget class="QDockWidget" name="projectDock">
    <property name="windowTitle">
@@ -200,6 +227,10 @@
    </property>
   </action>
   <action name="actionNew_Document">
+   <property name="icon">
+    <iconset resource="../resources.qrc">
+     <normaloff>:/resources/resources/document-new.png</normaloff>:/resources/resources/document-new.png</iconset>
+   </property>
    <property name="text">
     <string>&amp;New Document</string>
    </property>
@@ -208,6 +239,10 @@
    </property>
   </action>
   <action name="actionOpen_Document">
+   <property name="icon">
+    <iconset resource="../resources.qrc">
+     <normaloff>:/resources/resources/document-open.png</normaloff>:/resources/resources/document-open.png</iconset>
+   </property>
    <property name="text">
     <string>&amp;Open Document</string>
    </property>
@@ -218,6 +253,10 @@
   <action name="actionSave_Document">
    <property name="enabled">
     <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="../resources.qrc">
+     <normaloff>:/resources/resources/document-save.png</normaloff>:/resources/resources/document-save.png</iconset>
    </property>
    <property name="text">
     <string>&amp;Save Document</string>
@@ -240,6 +279,10 @@
   <action name="actionSave_Document_As">
    <property name="enabled">
     <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="../resources.qrc">
+     <normaloff>:/resources/resources/document-save-as.png</normaloff>:/resources/resources/document-save-as.png</iconset>
    </property>
    <property name="text">
     <string>Save Document &amp;As</string>
@@ -301,6 +344,138 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+D</string>
+   </property>
+  </action>
+  <action name="actionUndo">
+   <property name="icon">
+    <iconset resource="../resources.qrc">
+     <normaloff>:/resources/resources/edit-undo.png</normaloff>:/resources/resources/edit-undo.png</iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Undo</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Z</string>
+   </property>
+  </action>
+  <action name="actionRedo">
+   <property name="icon">
+    <iconset resource="../resources.qrc">
+     <normaloff>:/resources/resources/edit-redo.png</normaloff>:/resources/resources/edit-redo.png</iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Redo</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+Z</string>
+   </property>
+  </action>
+  <action name="actionCut">
+   <property name="icon">
+    <iconset resource="../resources.qrc">
+     <normaloff>:/resources/resources/edit-cut.png</normaloff>:/resources/resources/edit-cut.png</iconset>
+   </property>
+   <property name="text">
+    <string>C&amp;ut</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+X</string>
+   </property>
+  </action>
+  <action name="actionCopy">
+   <property name="icon">
+    <iconset resource="../resources.qrc">
+     <normaloff>:/resources/resources/edit-copy.png</normaloff>:/resources/resources/edit-copy.png</iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Copy</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+C</string>
+   </property>
+  </action>
+  <action name="actionPaste">
+   <property name="icon">
+    <iconset resource="../resources.qrc">
+     <normaloff>:/resources/resources/edit-paste.png</normaloff>:/resources/resources/edit-paste.png</iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Paste</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+V</string>
+   </property>
+  </action>
+  <action name="actionFind_Replace">
+   <property name="icon">
+    <iconset resource="../resources.qrc">
+     <normaloff>:/resources/resources/edit-find-replace.png</normaloff>:/resources/resources/edit-find-replace.png</iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Find/Replace</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+F</string>
+   </property>
+  </action>
+  <action name="actionTimer">
+   <property name="text">
+    <string>T&amp;imer</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+T</string>
+   </property>
+  </action>
+  <action name="actionClose_Project">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Close Pro&amp;ject</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+W</string>
+   </property>
+  </action>
+  <action name="actionNew_Project">
+   <property name="text">
+    <string>N&amp;ew Project</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+N</string>
+   </property>
+  </action>
+  <action name="actionExport_Project">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>E&amp;xport Project</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+X</string>
+   </property>
+  </action>
+  <action name="actionFiles">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Files</string>
+   </property>
+   <property name="visible">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionProjects">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Projects</string>
+   </property>
+   <property name="visible">
+    <bool>true</bool>
    </property>
   </action>
  </widget>

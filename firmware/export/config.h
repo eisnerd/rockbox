@@ -78,8 +78,10 @@
  * bit fields to allow PLATFORM_HOSTED to be OR'ed e.g. with a
  * possible future PLATFORM_ANDROID (some OSes might need totally different
  * handling to run on them than a stand-alone application) */
-#define PLATFORM_NATIVE (1<<0)
-#define PLATFORM_HOSTED (1<<1)
+#define PLATFORM_NATIVE  (1<<0)
+#define PLATFORM_HOSTED  (1<<1)
+#define PLATFORM_ANDROID (1<<2)
+#define PLATFORM_SDL     (1<<3)
 
 /* CONFIG_KEYPAD */
 #define PLAYER_PAD          1
@@ -126,12 +128,14 @@
 #define PHILIPS_HDD6330_PAD 42
 #define PBELL_VIBE500_PAD 43
 #define MPIO_HD200_PAD     44
+#define ANDROID_PAD        45
+#define SDL_PAD            46
 
 /* CONFIG_REMOTE_KEYPAD */
-#define H100_REMOTE 1
-#define H300_REMOTE 2
-#define X5_REMOTE   3
-#define MROBE_REMOTE 4
+#define H100_REMOTE   1
+#define H300_REMOTE   2
+#define IAUDIO_REMOTE 3
+#define MROBE_REMOTE  4
 
 /* CONFIG_BACKLIGHT_FADING */
 /* No fading capabilities at all (yet) */
@@ -284,7 +288,7 @@ Lyre prototype 1 */
 #define USBOTG_ARC      5020 /* PortalPlayer 502x */
 #define USBOTG_JZ4740   4740 /* Ingenic Jz4740/Jz4732 */
 #define USBOTG_AS3525   3525 /* AMS AS3525 */
-#define USBOTG_AS3525v2 3535 /* AMS AS3525v2 */
+#define USBOTG_AS3525v2 3535 /* AMS AS3525v2 FIXME : same than S3C6400X */
 #define USBOTG_S3C6400X 6400 /* Samsung S3C6400X, also used in the S5L8701 */
 
 /* Multiple cores */
@@ -424,6 +428,11 @@ Lyre prototype 1 */
 #include "config/vibe500.h"
 #elif defined(MPIO_HD200)
 #include "config/mpiohd200.h"
+
+#elif defined(APPLICATION)
+#include "config/application.h"
+#define CONFIG_CPU 0
+#define CONFIG_STORAGE 0
 #else
 /* no known platform */
 #endif
@@ -654,8 +663,8 @@ Lyre prototype 1 */
 
 /* Enable the directory cache and tagcache in RAM if we have
  * plenty of RAM. Both features can be enabled independently. */
-#if ((defined(MEMORYSIZE) && (MEMORYSIZE >= 8)) || MEM >= 8) && \
- !defined(BOOTLOADER) && !defined(__PCTOOL__)
+#if (MEMORYSIZE >= 8) && !defined(BOOTLOADER) && !defined(__PCTOOL__) \
+    && !defined(APPLICATION)
 #define HAVE_DIRCACHE
 #ifdef HAVE_TAGCACHE
 #define HAVE_TC_RAMCACHE
@@ -686,10 +695,16 @@ Lyre prototype 1 */
 #define HAVE_EXTENDED_MESSAGING_AND_NAME
 #define HAVE_WAKEUP_EXT_CB
 
+
+#if (CONFIG_PLATFORM & PLATFORM_ANDROID)
+#define HAVE_PRIORITY_SCHEDULING
+#endif
+
 #if (CONFIG_PLATFORM & PLATFORM_NATIVE)
 #define HAVE_PRIORITY_SCHEDULING
 #define HAVE_SCHEDULER_BOOSTCTRL
 #endif /* PLATFORM_NATIVE */
+
 
 #define HAVE_SEMAPHORE_OBJECTS
 
@@ -907,17 +922,19 @@ Lyre prototype 1 */
 #define USB_HAS_BULK
 #elif (CONFIG_USBOTG == USBOTG_ARC) || \
     (CONFIG_USBOTG == USBOTG_JZ4740) || \
-    (CONFIG_USBOTG == USBOTG_M66591)
+    (CONFIG_USBOTG == USBOTG_M66591) || \
+    (CONFIG_USBOTG == USBOTG_AS3525)
 #define USB_HAS_BULK
 #define USB_HAS_INTERRUPT
 #elif defined(CPU_TCC780X) || defined(CPU_TCC77X)
 #define USB_HAS_BULK
-#elif CONFIG_USBOTG == USBOTG_S3C6400X
+#elif CONFIG_USBOTG == USBOTG_S3C6400X || CONFIG_USBOTG == USBOTG_AS3525v2
 #define USB_HAS_BULK
 //#define USB_HAS_INTERRUPT -- seems to be broken
 #endif /* CONFIG_USBOTG */
 
-#if CONFIG_USBOTG == USBOTG_ARC
+#if (CONFIG_USBOTG == USBOTG_ARC) || \
+    (CONFIG_USBOTG == USBOTG_AS3525)
 #define USB_HAS_ISOCHRONOUS
 #endif
 
@@ -936,8 +953,12 @@ Lyre prototype 1 */
 #else /* BOOTLOADER */
 
 #if (CONFIG_PLATFORM & PLATFORM_NATIVE)
+#ifdef USB_HAS_BULK
 //#define USB_ENABLE_SERIAL
+#ifdef USE_ROCKBOX_USB
 #define USB_ENABLE_STORAGE
+#endif /* USE_ROCKBOX_USB */
+#endif /* USB_HAS_BULK */
 
 #ifdef USB_HAS_INTERRUPT
 #define USB_ENABLE_HID

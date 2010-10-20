@@ -24,6 +24,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <inttypes.h>
 #include "buffering.h"
 
 #include "storage.h"
@@ -31,7 +32,6 @@
 #include "thread.h"
 #include "file.h"
 #include "panic.h"
-#include "memory.h"
 #include "lcd.h"
 #include "font.h"
 #include "button.h"
@@ -46,7 +46,6 @@
 #include "screens.h"
 #include "playlist.h"
 #include "pcmbuf.h"
-#include "bmp.h"
 #include "appevents.h"
 #include "metadata.h"
 #ifdef HAVE_ALBUMART
@@ -780,7 +779,7 @@ static void rebuffer_handle(int handle_id, size_t newpos)
     {
         LOGFQUEUE("buffering >| Q_BUFFER_HANDLE %d", handle_id);
         queue_send(&buffering_queue, Q_BUFFER_HANDLE, handle_id);
-        h->ridx = h->data + newpos;
+        h->ridx = ringbuf_add(h->data, newpos - h->offset);
         return;
     }
 

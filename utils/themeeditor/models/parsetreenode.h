@@ -34,9 +34,11 @@
 class ParseTreeNode
 {
 public:
-    ParseTreeNode(struct skin_element* data);
-    ParseTreeNode(struct skin_element* data, ParseTreeNode* parent);
-    ParseTreeNode(struct skin_tag_parameter* data, ParseTreeNode* parent);
+    ParseTreeNode(struct skin_element* data, ParseTreeModel* model);
+    ParseTreeNode(struct skin_element* data, ParseTreeNode* parent,
+                  ParseTreeModel* model);
+    ParseTreeNode(struct skin_tag_parameter* data, ParseTreeNode* parent,
+                  ParseTreeModel* model);
     virtual ~ParseTreeNode();
 
     QString genCode() const;
@@ -60,16 +62,33 @@ public:
     }
 
     void render(const RBRenderInfo& info);
-    void render(const RBRenderInfo &info, RBViewport* viewport);
+    void render(const RBRenderInfo &info, RBViewport* viewport,
+                bool noBreak = false);
+
+    double findBranchTime(ParseTreeNode* branch, const RBRenderInfo& info);
+    double findConditionalTime(ParseTreeNode* conditional,
+                               const RBRenderInfo& info);
+
+    void modParam(QVariant value, int index = -1);
 
 private:
+
+    bool execTag(const RBRenderInfo& info, RBViewport* viewport);
+    QVariant evalTag(const RBRenderInfo& info, bool conditional = false,
+                     int branches = 0);
+
     ParseTreeNode* parent;
     struct skin_element* element;
     struct skin_tag_parameter* param;
     QList<ParseTreeNode*> children;
 
     static int openConditionals;
+    static bool breakFlag;
     QGraphicsItem* rendered;
+
+    ParseTreeModel* model;
+
+    QList<int> extraParams;
 
 };
 

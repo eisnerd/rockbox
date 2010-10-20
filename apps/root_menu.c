@@ -115,6 +115,10 @@ static int browser(void* param)
             {
                 strcpy(folder, current_track_path);
             }
+            else if (!strcmp(last_folder, "/"))
+            {
+                strcpy(folder, global_settings.start_directory);
+            }
             else
             {
 #ifdef HAVE_HOTSWAP
@@ -142,9 +146,9 @@ static int browser(void* param)
                         break;
                     }
                 }
-            if (!in_hotswap)
+                if (!in_hotswap)
 #endif
-                strcpy(folder, last_folder);
+                    strcpy(folder, last_folder);
             }
         break;
 #ifdef HAVE_TAGCACHE
@@ -252,7 +256,12 @@ static int browser(void* param)
     switch ((intptr_t)param)
     {
         case GO_TO_FILEBROWSER:
-            get_current_file(last_folder, MAX_PATH);
+            if (!get_current_file(last_folder, MAX_PATH) ||
+                !strchr(&last_folder[1], '/'))
+            {
+                last_folder[0] = '/';
+                last_folder[1] = '\0';
+            }
         break;
 #ifdef HAVE_TAGCACHE
         case GO_TO_DBBROWSER:
@@ -341,7 +350,7 @@ static int plugins_menu(void* param)
     MENUITEM_STRINGLIST(plugins_menu_items, ID2P(LANG_PLUGINS), NULL,
                         ID2P(LANG_PLUGIN_GAMES),
                         ID2P(LANG_PLUGIN_APPS), ID2P(LANG_PLUGIN_DEMOS));
-    char *folder;
+    const char *folder;
     int retval = GO_TO_PREVIOUS;
     int selection = 0, current = 0;
     while (retval == GO_TO_PREVIOUS)
@@ -554,9 +563,19 @@ static int load_plugin_screen(char *plug_path)
     global_status.last_screen = (char)next_screen;
     status_save();
     
-    ret_val = plugin_load(plug_path, NULL);
-    if (ret_val == PLUGIN_OK) 
+    switch (plugin_load(plug_path, NULL))
+    {
+    case PLUGIN_GOTO_WPS:
+        ret_val = GO_TO_WPS;
+        break;
+    case PLUGIN_OK:
         ret_val = audio_status() ? GO_TO_PREVIOUS : GO_TO_ROOT;
+        break;
+    default:
+        ret_val = GO_TO_PREVIOUS;
+        break;
+    }
+
     if (ret_val == GO_TO_PREVIOUS)
         last_screen = (old_previous == next_screen) ? GO_TO_ROOT : old_previous;
     return ret_val;
@@ -646,7 +665,13 @@ void root_menu(void)
                     if ( action_userabort(HZ/5) ) 
                         break;
                 }
-                next_screen = load_plugin_screen(PLUGIN_DEMOS_DIR "/pictureflow.rock");
+                {
+                    char pf_path[MAX_PATH];
+                    snprintf(pf_path, sizeof(pf_path),
+                            "%s/pictureflow.rock",
+                            PLUGIN_DEMOS_DIR);
+                    next_screen = load_plugin_screen(pf_path);
+                }
                 previous_browser = GO_TO_PICTUREFLOW;
                 break;
 #endif                

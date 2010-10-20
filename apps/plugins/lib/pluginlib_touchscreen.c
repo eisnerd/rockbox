@@ -22,8 +22,6 @@
 
 #include "plugin.h"
 
-#ifdef HAVE_TOUCHSCREEN
-
 #include "pluginlib_touchscreen.h"
 
 /*******************************************************************************
@@ -90,7 +88,8 @@ void touchbutton_draw(struct touchbutton *data, int num_buttons) {
     int i;
     /* These store the width and height of the title offset */
     int title_width, title_height;
-    
+    struct screen *lcd = rb->screens[SCREEN_MAIN];
+
     /* Loop over all the elements in data */
     for(i=0; i<num_buttons; i++) {
         /* Is this a visible button? */
@@ -98,10 +97,10 @@ void touchbutton_draw(struct touchbutton *data, int num_buttons) {
             /* Set the current viewport to the button so that all drawing
              *  operations are within the button location.
              */
-            rb->screens[SCREEN_MAIN]->set_viewport(&data[i].vp);
+            lcd->set_viewport(&data[i].vp);
             
             /* Get the string size so that the title can be centered. */
-            rb->lcd_getstringsize(data[i].title, &title_width, &title_height);
+            lcd->getstringsize(data[i].title, &title_width, &title_height);
             
             /* Center the title vertically */
             title_height=(data[i].vp.height-title_height)/2;
@@ -123,16 +122,17 @@ void touchbutton_draw(struct touchbutton *data, int num_buttons) {
              *  print the title.
              */
             if(title_width==0) {
-               rb->lcd_puts_scroll(0, 0, data[i].title);
+                lcd->puts_scroll_style_xyoffset(0, 0, data[i].title,
+                                                STYLE_DEFAULT, 0, title_height);
             } else {
-                rb->lcd_putsxy(title_width, title_height, data[i].title);
+                lcd->putsxy(title_width, title_height, data[i].title);
             }
             
             /* Draw bounding box around the button location. */
-            rb->lcd_drawrect( 0, 0, data[i].vp.width, data[i].vp.height);
+            lcd->draw_border_viewport();
         }
     }
-    rb->screens[SCREEN_MAIN]->set_viewport(NULL); /* Go back to the default viewport */
+    lcd->set_viewport(NULL); /* Go back to the default viewport */
 }
 
 /*******************************************************************************
@@ -245,5 +245,3 @@ struct ts_raster_button_result touchscreen_raster_map_button(struct ts_raster_bu
     map->_prev_btn_state = button;
     return ret;
 }
-
-#endif /* HAVE_TOUCHSCREEN */

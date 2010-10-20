@@ -34,8 +34,9 @@ enum {
 
 #if CONFIG_TUNER
 void radio_load_presets(char *filename);
+void radio_save_presets(void);
 void radio_init(void) INIT_ATTR;
-int radio_screen(void);
+void radio_screen(void);
 void radio_start(void);
 void radio_pause(void);
 void radio_stop(void);
@@ -48,10 +49,6 @@ int radio_current_frequency(void);
 int radio_current_preset(void);
 int radio_preset_count(void);
 const struct fmstation *radio_get_preset(int preset);
-
-/* skin functions */
-void fms_data_load(enum screen_type screen, const char *buf, bool isfile);
-void fms_skin_init(void);
 
 /* callbacks for the radio settings */
 void set_radio_region(int region);

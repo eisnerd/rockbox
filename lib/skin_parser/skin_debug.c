@@ -30,14 +30,26 @@
 /* Global variables for debug output */
 int debug_indent_level = 0;
 extern int skin_line;
+extern char* skin_start;
 
 /* Global error variables */
 int error_line;
+int error_col;
+const char *error_line_start;
 char* error_message;
 
 /* Debugging functions */
-void skin_error(enum skin_errorcode error)
+void skin_error(enum skin_errorcode error, const char* cursor)
 {
+
+    error_col = 0;
+
+    while(cursor > skin_start && *cursor != '\n')
+    {
+        cursor--;
+        error_col++;
+    }
+    error_line_start = cursor+1;
 
     error_line = skin_line;
 
@@ -70,6 +82,9 @@ void skin_error(enum skin_errorcode error)
     case INT_EXPECTED:
         error_message =  "Expected integer";
         break;
+    case DECIMAL_EXPECTED:
+        error_message =  "Expected decimal";
+        break;
     case SEPERATOR_EXPECTED:
         error_message = "Expected argument seperator";
         break;
@@ -88,6 +103,11 @@ int skin_error_line()
     return error_line;
 }
 
+int skin_error_col()
+{
+    return error_col;
+}
+
 char* skin_error_message()
 {
     return error_message;
@@ -96,10 +116,11 @@ char* skin_error_message()
 void skin_clear_errors()
 {
     error_line = 0;
+    error_col = 0;
     error_message = NULL;
 }
 
-#ifndef ROCKBOX
+#if !defined(ROCKBOX) || defined(__PCTOOL__)
 void skin_debug_tree(struct skin_element* root)
 {
     int i;
@@ -157,7 +178,7 @@ void skin_debug_tree(struct skin_element* root)
 
             break;
 
-        case SUBLINES:
+        case LINE_ALTERNATOR:
             printf("[ Alternator on line %d with %d sublines \n", current->line,
                    current->children_count);
             debug_indent_level++;
@@ -206,7 +227,8 @@ void skin_debug_tree(struct skin_element* root)
             printf("[ Logical line on line %d\n", current->line);
 
             debug_indent_level++;
-            skin_debug_tree(current->children[0]);
+            if (current->children)
+                skin_debug_tree(current->children[0]);
             debug_indent_level--;
 
             skin_debug_indent();
@@ -236,8 +258,13 @@ void skin_debug_params(int count, struct skin_tag_parameter params[])
             printf("[%s]", params[i].data.text);
             break;
 
-        case NUMERIC:
-            printf("[%d]", params[i].data.numeric);
+        case INTEGER:
+            printf("[%d]", params[i].data.number);
+            break;
+            
+        case DECIMAL:
+            printf("[%d.%d]", params[i].data.number/10,
+                              params[i].data.number%10);
             break;
 
         case CODE:
@@ -261,4 +288,42 @@ void skin_debug_indent()
     for(i = 0; i < debug_indent_level; i++)
         printf("    ");
 }
+
 #endif
+
+#define MIN(a,b) ((a<b)?(a):(b))
+void skin_error_format_message()
+{
+    int i;
+    char text[128];
+    char* line_end = strchr(error_line_start, '\n');
+    int len = MIN(line_end - error_line_start, 80);
+    if (!line_end)
+        len = strlen(error_line_start);
+    printf("Error on line %d.\n", error_line);
+    error_col--;
+    if (error_col <= 10)
+    {
+        strncpy(text, error_line_start, len);
+        text[len] = '\0';
+    }
+    else
+    {
+        int j;
+        /* make it fit nicely.. "<start few chars>...<10 chars><error>" */
+        strncpy(text, error_line_start, 6);
+        i = 5;
+        text[i++] = '.';
+        text[i++] = '.';
+        text[i++] = '.';
+        for (j=error_col-10; error_line_start[j] && error_line_start[j] != '\n'; j++)
+            text[i++] = error_line_start[j];
+        text[i] = '\0';
+        error_col = 18;
+    }
+    printf("%s\n", text);
+    for (i=0; i<error_col; i++)
+        text[i] = ' ';
+    snprintf(&text[i],64, "^ \'%s\' Here", error_message);
+    printf("%s\n", text);
+}

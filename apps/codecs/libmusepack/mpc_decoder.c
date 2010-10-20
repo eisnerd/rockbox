@@ -208,7 +208,7 @@ void mpc_decoder_read_bitstream_sv8(mpc_decoder * d, mpc_bits_reader * r,
     *(YR+=IDX) = *(YL+=IDX) = 0;
 
 #define REQUANT_SILENCE \
-    for (n = 0; n < 12; n+=4, YL += 32, YR += 32) { \
+    for (n = 0; n < 36; n+=4, YL += 32, YR += 32) { \
         REQUANT_SILENCE_SAMPLES( 0); \
         REQUANT_SILENCE_SAMPLES(32); \
         REQUANT_SILENCE_SAMPLES(32); \
@@ -272,10 +272,12 @@ mpc_decoder * mpc_decoder_init(mpc_streaminfo *si)
     return p_tmp;
 }
 
+/* rockbox: not used
 void mpc_decoder_exit(mpc_decoder *d)
 {
     (void)d;
 }
+*/
 
 void mpc_decoder_decode_frame(mpc_decoder * d,
                               mpc_bits_reader * r,

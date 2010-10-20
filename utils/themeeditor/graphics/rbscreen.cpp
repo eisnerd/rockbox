@@ -19,23 +19,39 @@
  *
  ****************************************************************************/
 
+#include "rbscene.h"
 #include "rbscreen.h"
 #include "rbviewport.h"
+#include "devicestate.h"
 
 #include <QPainter>
 #include <QFile>
+#include <QGraphicsSceneHoverEvent>
+#include <QGraphicsSceneMouseEvent>
 
-RBScreen::RBScreen(const RBRenderInfo& info, QGraphicsItem *parent) :
-    QGraphicsItem(parent), backdrop(0), project(project)
+RBScreen::RBScreen(const RBRenderInfo& info, bool remote,
+                   QGraphicsItem *parent)
+                       :QGraphicsItem(parent), backdrop(0), project(project),
+                       albumArt(0), customUI(0), defaultView(0), ax(false)
 {
 
-    width = info.settings()->value("#screenwidth", "300").toInt();
-    height = info.settings()->value("#screenheight", "200").toInt();
+    setAcceptHoverEvents(true);
 
-    QString bg = info.settings()->value("background color", "000000");
+    if(remote)
+    {
+        fullWidth = info.device()->data("remotewidth").toInt();
+        fullHeight = info.device()->data("remoteheight").toInt();
+    }
+    else
+    {
+        fullWidth = info.device()->data("screenwidth").toInt();
+        fullHeight = info.device()->data("screenheight").toInt();
+    }
+
+    QString bg = info.settings()->value("background color", "FFFFFF");
     bgColor = stringToColor(bg, Qt::white);
 
-    QString fg = info.settings()->value("foreground color", "FFFFFF");
+    QString fg = info.settings()->value("foreground color", "000000");
     fgColor = stringToColor(fg, Qt::black);
 
     settings = info.settings();
@@ -52,14 +68,33 @@ RBScreen::RBScreen(const RBRenderInfo& info, QGraphicsItem *parent) :
         /* If a backdrop has been found, use its width and height */
         if(!backdrop->isNull())
         {
-            width = backdrop->width();
-            height = backdrop->height();
+            fullWidth = backdrop->width();
+            fullHeight = backdrop->height();
         }
         else
         {
             delete backdrop;
             backdrop = 0;
         }
+    }
+
+    fonts.insert(0, new RBFont("Default"));
+    QString defaultFont = settings->value("font", "");
+    if(defaultFont != "")
+    {
+        defaultFont.replace("/.rockbox", settings->value("themebase", ""));
+        fonts.insert(1, new RBFont(defaultFont));
+    }
+
+    if(parent == 0)
+    {
+        width = fullWidth;
+        height = fullHeight;
+    }
+    else
+    {
+        width = parent->boundingRect().width();
+        height = parent->boundingRect().height();
     }
 }
 
@@ -68,10 +103,16 @@ RBScreen::~RBScreen()
     if(backdrop)
         delete backdrop;
 
+    if(albumArt)
+        delete albumArt;
+
     QMap<int, RBFont*>::iterator i;
     for(i = fonts.begin(); i != fonts.end(); i++)
-        if(*i)
-            delete (*i);
+        delete (*i);
+
+    QMap<QString, QList<RBViewport*>*>::iterator it;
+    for(it = namedViewports.begin(); it != namedViewports.end(); it++)
+        delete (*it);
 }
 
 QPainterPath RBScreen::shape() const
@@ -89,6 +130,9 @@ QRectF RBScreen::boundingRect() const
 void RBScreen::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                      QWidget *widget)
 {
+    if(parentItem() != 0)
+        return;
+
     if(backdrop)
     {
         painter->drawPixmap(0, 0, width, height, *backdrop);
@@ -97,15 +141,36 @@ void RBScreen::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
     {
         painter->fillRect(0, 0, width, height, bgColor);
     }
+
+}
+
+void RBScreen::loadViewport(QString name, RBViewport *view)
+{
+    QList<RBViewport*>* list;
+    if(namedViewports.value(name, 0) == 0)
+    {
+        list = new QList<RBViewport*>;
+        list->append(view);
+        namedViewports.insert(name, list);
+    }
+    else
+    {
+        list = namedViewports.value(name, 0);
+        list->append(view);
+    }
 }
 
 void RBScreen::showViewport(QString name)
 {
     if(namedViewports.value(name, 0) == 0)
+    {
+        displayedViewports.append(name);
         return;
+    }
 
-    namedViewports.value(name)->show();
-    update();
+    QList<RBViewport*>* list = namedViewports.value(name, 0);
+    for(int i = 0; i < list->count(); i++)
+        list->at(i)->show();
 }
 
 void RBScreen::loadFont(int id, RBFont* font)
@@ -136,19 +201,53 @@ void RBScreen::setBackdrop(QString filename)
     if(QFile::exists(filename))
         backdrop = new QPixmap(filename);
     else
+    {
+        RBScene* s = dynamic_cast<RBScene*>(scene());
+        s->addWarning(QObject::tr("Image not found: ") + filename);
         backdrop = 0;
+    }
 }
 
 void RBScreen::makeCustomUI(QString id)
 {
     if(namedViewports.value(id, 0) != 0)
     {
-        QMap<QString, RBViewport*>::iterator i;
+        QMap<QString, QList<RBViewport*>*>::iterator i;
         for(i = namedViewports.begin(); i != namedViewports.end(); i++)
-            (*i)->clearCustomUI();
-        namedViewports.value(id)->makeCustomUI();
-        namedViewports.value(id)->show();
+            for(int j = 0; j < (*i)->count(); j++)
+                (*i)->at(j)->clearCustomUI();
+        for(int i = 0; i < namedViewports.value(id)->count(); i++)
+            namedViewports.value(id)->at(i)->makeCustomUI();
+        for(int i = 0; i < namedViewports.value(id)->count(); i++)
+            namedViewports.value(id)->at(i)->show();
+
+        customUI = namedViewports.value(id)->at(0);
     }
+}
+
+void RBScreen::endSbsRender()
+{
+    sbsChildren = children();
+
+    QList<int> keys = fonts.keys();
+    for(QList<int>::iterator i = keys.begin(); i != keys.end(); i++)
+    {
+        if(*i > 2)
+            fonts.remove(*i);
+    }
+
+    images.clear();
+    namedViewports.clear();
+    displayedViewports.clear();
+}
+
+void RBScreen::breakSBS()
+{
+    for(QList<QGraphicsItem*>::iterator i = sbsChildren.begin()
+        ; i != sbsChildren.end(); i++)
+        (*i)->hide();
+    if(defaultView)
+        defaultView->makeFullScreen();
 }
 
 QColor RBScreen::stringToColor(QString str, QColor fallback)
@@ -192,4 +291,14 @@ QColor RBScreen::stringToColor(QString str, QColor fallback)
 
     return retval;
 
+}
+
+void RBScreen::hoverMoveEvent(QGraphicsSceneHoverEvent *event)
+{
+    RBScene* s = dynamic_cast<RBScene*>(scene());
+    QPoint p = event->scenePos().toPoint();
+    s->moveMouse("(" + QString::number(p.x()) + ", "
+                 + QString::number(p.y()) + ")");
+
+    QGraphicsItem::hoverMoveEvent(event);
 }

@@ -307,17 +307,17 @@ static void set_serial_descriptor(void)
 #elif defined(HAVE_AS3514)
 static void set_serial_descriptor(void)
 {
-    unsigned char serial[16];
+    unsigned char serial[AS3514_UID_LEN];
     /* Align 32 digits right in the 40-digit serial number */
     short* p = &usb_string_iSerial.wString[1];
     int i;
 
-    ascodec_readbytes(AS3514_UID_0, 0x10, serial);
-    for(i = 0; i < 16; i++) {
+    ascodec_readbytes(AS3514_UID_0, AS3514_UID_LEN, serial);
+    for(i = 0; i < AS3514_UID_LEN; i++) {
         *p++ = hex[(serial[i] >> 4) & 0xF];
         *p++ = hex[(serial[i] >> 0) & 0xF];
     }
-    usb_string_iSerial.bLength = 68;
+    usb_string_iSerial.bLength = 36 + (2 * AS3514_UID_LEN);
 }
 #elif (CONFIG_STORAGE & STORAGE_ATA)
 /* If we don't know the device serial number, use the one
@@ -551,7 +551,6 @@ static void control_request_handler_drivers(struct usb_ctrlrequest* req)
 static void request_handler_device_get_descriptor(struct usb_ctrlrequest* req)
 {
     int size;
-    bool handled = true;
     const void* ptr = NULL;
     int length = req->wLength;
     int index = req->wValue & 0xff;
@@ -621,7 +620,6 @@ static void request_handler_device_get_descriptor(struct usb_ctrlrequest* req)
 
         default:
             logf("ctrl desc.");
-            handled = false;
             control_request_handler_drivers(req);
             break;
     }
@@ -697,6 +695,8 @@ static void request_handler_device(struct usb_ctrlrequest* req)
             usb_drv_send(EP_CONTROL, response_data, 2);
             break;
         default:
+            logf("bad req:desc %d:%d", req->bRequest, req->wValue);
+            usb_drv_stall(EP_CONTROL, true, true);
             break;
     }
 }
@@ -742,6 +742,9 @@ static void request_handler_interface(struct usb_ctrlrequest* req)
             control_request_handler_drivers(req);
             break;
         case USB_TYPE_VENDOR:
+        default:
+            logf("bad req:desc %d", req->bRequest);
+            usb_drv_stall(EP_CONTROL, true, true);
             break;
     }
 }
@@ -808,6 +811,8 @@ static void request_handler_endpoint(struct usb_ctrlrequest* req)
             break;
         case USB_TYPE_VENDOR:
         default:
+            logf("bad req:desc %d", req->bRequest);
+            usb_drv_stall(EP_CONTROL, true, true);
             break;
     }
 }
@@ -841,6 +846,7 @@ static void usb_core_control_request_handler(struct usb_ctrlrequest* req)
             break;
         case USB_RECIP_OTHER:
             logf("unsupported recipient");
+            usb_drv_stall(EP_CONTROL, true, true);
             break;
     }
     //logf("control handled");

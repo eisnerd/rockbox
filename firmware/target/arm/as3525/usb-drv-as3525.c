@@ -22,6 +22,7 @@
 #include "system.h"
 #include "usb.h"
 #include "usb_drv.h"
+#include "usb-target.h"
 #include "as3525.h"
 #include "clock-target.h"
 #include "ascodec.h"
@@ -34,12 +35,11 @@
 #include "usb_core.h"
 #include "string.h"
 
-#if defined(USE_ROCKBOX_USB)
-
 #include "usb-drv-as3525.h"
 
 static struct usb_endpoint endpoints[USB_NUM_EPS][2];
 static int got_set_configuration = 0;
+static int usb_enum_timeout = -1;
 
 /*
  * dma/setup descriptors and buffers should avoid sharing
@@ -218,7 +218,7 @@ static void reset_endpoints(int init)
     }
 
     setup_desc_init(setup_desc);
-    USB_OEP_SUP_PTR(0)    = (int)setup_desc;
+    USB_OEP_SUP_PTR(0)    = AS3525_PHYSICAL_ADDR((int)setup_desc);
 }
 
 void usb_drv_init(void)
@@ -234,7 +234,7 @@ void usb_drv_init(void)
     ascodec_write(AS3514_CVDD_DCDC3, ascodec_read(AS3514_CVDD_DCDC3) | 1<<2);
 
     /* AHB part */
-    CGU_PERI |= CGU_USB_CLOCK_ENABLE;
+    bitset32(&CGU_PERI, CGU_USB_CLOCK_ENABLE);
 
     /* reset AHB */
     CCU_SRC = CCU_SRC_USB_AHB_EN;
@@ -298,6 +298,8 @@ void usb_drv_init(void)
                  | USB_GPIO_CLK_SEL10; /* 0x06180000; */
 
     tick_add_task(usb_tick);
+
+    usb_enum_timeout = HZ; /* one second timeout for enumeration */
 }
 
 void usb_drv_exit(void)
@@ -315,7 +317,7 @@ void usb_drv_exit(void)
     USB_DEV_INTR_MASK    = 0xffffffff;
     VIC_INT_EN_CLEAR = INTERRUPT_USB;
     CGU_USB &= ~(1<<5);
-    CGU_PERI &= ~CGU_USB_CLOCK_ENABLE;
+    bitclr32(&CGU_PERI, CGU_USB_CLOCK_ENABLE);
     /* Disable UVDD generating LDO */
     ascodec_write(AS3515_USB_UTIL, ascodec_read(AS3515_USB_UTIL) & ~(1<<4));
     usb_disable_pll();
@@ -413,7 +415,6 @@ int usb_drv_recv(int ep, void *ptr, int len)
     endpoints[ep][1].state |= EP_STATE_BUSY;
     endpoints[ep][1].len = len;
     endpoints[ep][1].rc  = -1;
-    endpoints[ep][1].buf = ptr;
 
     /* remove data buffer from cache */
     invalidate_dcache_range(ptr, len);
@@ -426,17 +427,16 @@ int usb_drv_recv(int ep, void *ptr, int len)
         uc_desc->status   |= USB_DMA_DESC_ZERO_LEN;
         uc_desc->data_ptr  = 0;
     } else {
-        uc_desc->data_ptr  = ptr;
+        uc_desc->data_ptr  = AS3525_PHYSICAL_ADDR(ptr);
     }
-    USB_OEP_DESC_PTR(ep) = (int)&dmadescs[ep][1];
+    USB_OEP_DESC_PTR(ep) = AS3525_PHYSICAL_ADDR((int)&dmadescs[ep][1]);
     USB_OEP_STS(ep)      = USB_EP_STAT_OUT_RCVD; /* clear status */
 
     /* Make sure receive DMA is on */
     if (!(USB_DEV_CTRL & USB_DEV_CTRL_RDE)){
-        logf("enabling receive DMA\n");
         USB_DEV_CTRL |= USB_DEV_CTRL_RDE;
         if (!(USB_DEV_CTRL & USB_DEV_CTRL_RDE))
-            logf("failed to enable!\n");
+            logf("failed to enable RDE!\n");
     }
 
     USB_OEP_CTRL(ep)    |= USB_EP_CTRL_CNAK; /* Go! */
@@ -476,13 +476,22 @@ char *make_hex(char *data, int len)
 }
 #endif
 
-void ep_send(int ep, void *ptr, int len)
+static void ep_send(int ep, void *ptr, int len)
 {
     struct usb_dev_dma_desc *uc_desc = endpoints[ep][0].uc_desc;
 
     endpoints[ep][0].state |= EP_STATE_BUSY;
     endpoints[ep][0].len = len;
     endpoints[ep][0].rc = -1;
+
+    /*
+     * I'm seeing a problem where Linux sends two SETUP requests,
+     * but fails to read the response from the first one.
+     * We then have the response we wanted to send still in our fifo,
+     * so flush the fifo before sending on the control endpoint.
+     */
+    if (ep == 0)
+        USB_IEP_CTRL(ep) |= USB_EP_CTRL_FLUSH;
 
     /* Make sure data is committed to memory */
     clean_dcache_range(ptr, len);
@@ -495,9 +504,9 @@ void ep_send(int ep, void *ptr, int len)
     if (len == 0)
         uc_desc->status |= USB_DMA_DESC_ZERO_LEN;
 
-    uc_desc->data_ptr  = ptr;
+    uc_desc->data_ptr  = AS3525_PHYSICAL_ADDR(ptr);
 
-    USB_IEP_DESC_PTR(ep) = (int)&dmadescs[ep][0];
+    USB_IEP_DESC_PTR(ep) = AS3525_PHYSICAL_ADDR((int)&dmadescs[ep][0]);
     USB_IEP_STS(ep)      = 0xffffffff; /* clear status */
     /* start transfer */
     USB_IEP_CTRL(ep)     |= USB_EP_CTRL_CNAK | USB_EP_CTRL_PD;
@@ -520,8 +529,8 @@ int usb_drv_send(int ep, void *ptr, int len)
     }
 
     ep_send(ep, ptr, len);
-    while (endpoints[ep][0].state & EP_STATE_BUSY)
-        wakeup_wait(&endpoints[ep][0].complete, TIMEOUT_BLOCK);
+    if (wakeup_wait(&endpoints[ep][0].complete, HZ) == OBJ_WAIT_TIMEDOUT)
+        logf("send timed out!\n");
 
     return endpoints[ep][0].rc;
 }
@@ -642,17 +651,6 @@ static void handle_out_ep(int ep)
         logf("ep%d OUT, status %x\n", ep, ep_sts);
         panicf("ep%d OUT 0x%x", ep, ep_sts);
     }
-
-#if 0
-    /* HW automatically disables RDE, re-enable it */
-    /* THEORY: Because we only set up one DMA buffer... */
-    USB_DEV_CTRL |= USB_DEV_CTRL_RDE;
-#endif
-
-    if (!(USB_DEV_CTRL & USB_DEV_CTRL_RDE)){
-        logf("receive DMA is disabled!\n");
-        //USB_DEV_CTRL |= USB_DEV_CTRL_RDE;
-    }
 }
 
 /*
@@ -674,26 +672,32 @@ static void usb_tick(void)
     static int rde_timer = 0;
     static int rde_fails = 0;
 
+    if (usb_enum_timeout != -1) {
+        /*
+         * If the enum times out it's a charger, drop out of usb mode.
+         */
+        if (usb_enum_timeout-- <= 0)
+            usb_remove_int();
+    }
+
     if (USB_DEV_CTRL & USB_DEV_CTRL_RDE)
         return;
 
-    if (!(USB_DEV_STS & USB_DEV_STS_RXF_EMPTY)) {
-        if (rde_timer == 0)
-            logf("usb_tick: fifo got filled\n");
+    if (!(USB_DEV_STS & USB_DEV_STS_RXF_EMPTY))
         rde_timer++;
-    }
 
-    if (rde_timer > 2) {
-        logf("usb_tick: re-enabling RDE\n");
-        USB_DEV_CTRL |= USB_DEV_CTRL_RDE;
-        rde_timer = 0;
-        if (USB_DEV_CTRL & USB_DEV_CTRL_RDE) {
-            rde_fails = 0;
-        } else {
-            rde_fails++;
-            if (rde_fails > 3)
-                panicf("usb_tick: failed to set RDE");
-        }
+    if (rde_timer < 2)
+        return;
+
+    logf("usb_tick: re-enabling RDE\n");
+    USB_DEV_CTRL |= USB_DEV_CTRL_RDE;
+    rde_timer = 0;
+    if (USB_DEV_CTRL & USB_DEV_CTRL_RDE) {
+        rde_fails = 0;
+    } else {
+        rde_fails++;
+        if (rde_fails > 3)
+            panicf("usb_tick: failed to set RDE");
     }
 }
 
@@ -768,24 +772,13 @@ void INT_USB(void)
         }
         if (intr & USB_DEV_INTR_ENUM_DONE) {/* speed enumeration complete */
             int spd = USB_DEV_STS & USB_DEV_STS_MASK_SPD;  /* Enumerated Speed */
+            usb_enum_timeout = -1;
 
             logf("speed enum complete: ");
             if (spd == USB_DEV_STS_SPD_HS) logf("hs\n");
             if (spd == USB_DEV_STS_SPD_FS) logf("fs\n");
             if (spd == USB_DEV_STS_SPD_LS) logf("ls\n");
 
-            USB_PHY_EP0_INFO = 0x00200000       |
-                               USB_CSR_DIR_OUT  |
-                               USB_CSR_TYPE_CTL;
-            USB_PHY_EP1_INFO = 0x00200000       |
-                               USB_CSR_DIR_IN   |
-                               USB_CSR_TYPE_CTL;
-            USB_PHY_EP2_INFO = 0x00200001       |
-                               USB_CSR_DIR_IN   |
-                               USB_CSR_TYPE_BULK;
-            USB_PHY_EP3_INFO = 0x00200001       |
-                               USB_CSR_DIR_IN   |
-                               USB_CSR_TYPE_BULK;
             USB_DEV_CTRL |= USB_DEV_CTRL_APCSR_DONE;
             USB_IEP_CTRL(0) |= USB_EP_CTRL_ACT;
             USB_OEP_CTRL(0) |= USB_EP_CTRL_ACT;
@@ -825,93 +818,3 @@ bool usb_drv_stalled(int ep, bool in)
 {
     return USB_EP_CTRL(ep, in) & USB_EP_CTRL_STALL;
 }
-
-#else
-
-void usb_attach(void)
-{
-}
-
-void usb_drv_init(void)
-{
-}
-
-void usb_drv_exit(void)
-{
-}
-
-int usb_drv_port_speed(void)
-{
-    return 0;
-}
-
-int usb_drv_request_endpoint(int type, int dir)
-{
-    (void)type;
-    (void)dir;
-
-    return -1;
-}
-
-void usb_drv_release_endpoint(int ep)
-{
-    (void)ep;
-}
-
-void usb_drv_cancel_all_transfers(void)
-{
-}
-
-void usb_drv_set_test_mode(int mode)
-{
-    (void)mode;
-}
-
-void usb_drv_set_address(int address)
-{
-    (void)address;
-}
-
-int usb_drv_recv(int ep, void *ptr, int len)
-{
-    (void)ep;
-    (void)ptr;
-    (void)len;
-
-    return -1;
-}
-
-int usb_drv_send(int ep, void *ptr, int len)
-{
-    (void)ep;
-    (void)ptr;
-    (void)len;
-
-    return -1;
-}
-
-int usb_drv_send_nonblocking(int ep, void *ptr, int len)
-{
-    (void)ep;
-    (void)ptr;
-    (void)len;
-
-    return -1;
-}
-
-void usb_drv_stall(int ep, bool stall, bool in)
-{
-    (void)ep;
-    (void)stall;
-    (void)in;
-}
-
-bool usb_drv_stalled(int ep, bool in)
-{
-    (void)ep;
-    (void)in;
-
-    return 0;
-}
-
-#endif

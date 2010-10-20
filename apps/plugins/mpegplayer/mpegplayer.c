@@ -108,8 +108,6 @@
 #include "stream_thread.h"
 #include "stream_mgr.h"
 
-PLUGIN_HEADER
-PLUGIN_IRAM_DECLARE
 
 /* button definitions */
 #if (CONFIG_KEYPAD == IRIVER_H100_PAD) || (CONFIG_KEYPAD == IRIVER_H300_PAD)
@@ -1760,9 +1758,6 @@ enum plugin_status plugin_start(const void* parameter)
 
     /* Disable all talking before initializing IRAM */
     rb->talk_disable(true);
-
-    /* Initialize IRAM - stops audio and voice as well */
-    PLUGIN_IRAM_INIT(rb)
 
 #ifdef HAVE_LCD_COLOR
     rb->lcd_set_backdrop(NULL);

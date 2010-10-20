@@ -73,7 +73,7 @@ static off_t tv_get_fpos(int page)
     return 0;
 }
 
-static void tv_change_preferences(const struct tv_preferences *oldp)
+static int tv_change_preferences(const struct tv_preferences *oldp)
 {
     (void)oldp;
 
@@ -83,6 +83,7 @@ static void tv_change_preferences(const struct tv_preferences *oldp)
     max_page  = TV_MAX_PAGE - 1;
     tv_set_fpos(cur_pos.page, 0);
     tv_seek(0, SEEK_SET);
+    return TV_CALLBACK_OK;
 }
 
 bool tv_init_pager(unsigned char **buf, size_t *size)
@@ -219,7 +220,7 @@ void tv_convert_fpos(off_t fpos, struct tv_screen_pos *pos)
     while (tv_create_line_positions() && cur_pos.file_pos < fpos)
         rb->splashf(0, "converting %ld%%...", 100 * cur_pos.file_pos / fpos);
 
-    if (cur_pos.page < max_page)
+    if (i < max_page)
         cur_pos.page--;
     tv_seek_page(cur_pos.page, SEEK_SET);
     for (i = 0; i < lines_per_page; i++)
@@ -295,6 +296,8 @@ void tv_move_screen(int page_offset, int line_offset, int whence)
         if (cur_pos.page < max_page && new_pos.line == lines_per_page)
         {
             tv_seek(line_pos[lines_per_page], SEEK_CUR);
+            cur_pos.file_pos += line_pos[lines_per_page];
+
             for (i = 0; i < parse_lines; i++)
                 line_pos[i] = line_pos[i + lines_per_page] - line_pos[lines_per_page];
 

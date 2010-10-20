@@ -24,6 +24,7 @@
 #include "sd.h"
 #include "system.h"
 #include <string.h>
+#include "gcc_extensions.h"
 #include "thread.h"
 #include "panic.h"
 
@@ -299,8 +300,8 @@ static void init_sdi_controller(const int card_no)
 
 #if 1
     /* Enable interrupt in controller */
-    s3c_regclr32(&INTMOD, SDI_MASK);
-    s3c_regclr32(&INTMSK, SDI_MASK);
+    bitclr32(&INTMOD, SDI_MASK);
+    bitclr32(&INTMSK, SDI_MASK);
     
     SDIIMSK |= S3C2410_SDIIMSK_DATAFINISH 
                | S3C2410_SDIIMSK_DATATIMEOUT
@@ -575,7 +576,7 @@ bool sd_removable(IF_MD_NONVOID(int card_no))
 #endif /* HAVE_HOTSWAP */
 /*****************************************************************************/
 
-static void sd_thread(void) __attribute__((noreturn));
+static void sd_thread(void) NORETURN_ATTR;
 static void sd_thread(void)
 {
     struct queue_event ev;

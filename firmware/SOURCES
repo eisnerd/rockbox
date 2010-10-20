@@ -3,6 +3,7 @@ events.c
 backlight.c
 buffer.c
 general.c
+load_code.c
 powermgmt.c
 system.c
 usb.c
@@ -19,7 +20,10 @@ rolo.c
 #endif /* !defined(BOOTLOADER) || defined(CPU_SH) */
 thread.c
 timer.c
+debug.c
 #endif /* PLATFORM_NATIVE */
+panic.c
+
 #ifdef HAVE_SDL
 target/hosted/sdl/button-sdl.c
 target/hosted/sdl/kernel-sdl.c
@@ -35,9 +39,13 @@ target/hosted/sdl/lcd-sdl.c
 target/hosted/sdl/system-sdl.c
 target/hosted/sdl/thread-sdl.c
 target/hosted/sdl/timer-sdl.c
+#ifdef HAVE_TOUCHSCREEN
+target/hosted/sdl/key_to_touch-sdl.c
 #endif
-panic.c
-debug.c
+#ifdef APPLICATION
+target/hosted/sdl/app/button-application.c
+#endif
+#endif
 
 /* Standard library */
 #if (CONFIG_PLATFORM & PLATFORM_NATIVE) || defined(__MINGW32__) || defined(__CYGWIN__)
@@ -99,6 +107,9 @@ common/dircache.c
 #endif /* HAVE_DIRCACHE */
 common/filefuncs.c
 common/format.c
+#ifdef APPLICATION
+common/rbpaths.c
+#endif
 common/strcasecmp.c
 common/strcasestr.c
 common/strnatcmp.c
@@ -439,7 +450,9 @@ target/arm/memset16-arm.S
 #ifdef HAVE_PRIORITY_SCHEDULING
 target/arm/ffs-arm.S
 #endif
+#if CONFIG_PLATFORM & PLATFORM_NATIVE
 target/arm/system-arm.c
+#endif
 #if CONFIG_I2C == I2C_PP5024 || CONFIG_I2C == I2C_PP5020 || CONFIG_I2C == I2C_PP5002
 target/arm/i2c-pp.c
 #elif CONFIG_I2C == I2C_PNX0101
@@ -459,6 +472,7 @@ target/arm/pnx0101/timer-pnx0101.c
 #endif
 
 #if CONFIG_CPU == AS3525 || CONFIG_CPU == AS3525v2
+target/arm/bits-armv4.S
 target/arm/as3525/system-as3525.c
 target/arm/as3525/memory-init.S
 target/arm/as3525/kernel-as3525.c
@@ -526,7 +540,6 @@ target/arm/crt0.S
 #endif /* SIMULATOR */
 
 #elif defined(CPU_MIPS)
-#undef mips
 common/memset16.c
 target/mips/ffs-mips.S
 target/mips/memcpy-mips.S
@@ -893,6 +906,7 @@ target/arm/usb-fw-pp502x.c
 
 #ifdef GIGABEAT_F
 #ifndef SIMULATOR
+target/arm/bits-armv4.S
 target/arm/lcd-as-memframe.S
 target/arm/mmu-arm.S
 target/arm/s3c2440/adc-s3c2440.c
@@ -918,6 +932,7 @@ target/arm/s3c2440/gigabeat-fx/wmcodec-meg-fx.c
 
 #ifdef GIGABEAT_S
 #ifndef SIMULATOR
+target/arm/bits-armv6.S
 target/arm/lcd-as-memframe.S
 target/arm/mmu-armv6.S
 target/arm/imx31/ata-imx31.c
@@ -1269,7 +1284,7 @@ target/arm/as3525/sansa-clipplus/backlight-clip.c
 target/arm/powermgmt-ascodec.c
 target/arm/as3525/sansa-clipplus/powermgmt-clipplus.c
 target/arm/as3525/sansa-clipplus/lcd-as-clip-plus.S
-target/arm/as3525/sansa-clipplus/tuner-clipplus.c
+target/arm/as3525/tuner-as3525v2.c
 #endif /* !BOOTLOADER */
 #endif /* !SIMULATOR */
 #endif /* SANSA_CLIPPLUS */
@@ -1355,6 +1370,7 @@ target/arm/as3525/lcd-as-e200v2-fuze-fuzev2.S
 
 #ifdef SANSA_FUZEV2
 #ifndef SIMULATOR
+target/arm/as3525/tuner-as3525v2.c
 target/arm/as3525/lcd-fuze.c
 target/arm/as3525/sansa-fuzev2/lcd-fuzev2.c
 target/arm/as3525/sansa-fuzev2/backlight-fuzev2.c
@@ -1553,6 +1569,7 @@ target/arm/at91sam/lyre_proto1/timer-lyre_proto1.c
 
 #if defined(MINI2440)
 #ifndef SIMULATOR
+target/arm/bits-armv4.S
 target/arm/lcd-as-memframe.S
 target/arm/mmu-arm.S
 target/arm/s3c2440/debug-s3c2440.c
@@ -1683,4 +1700,24 @@ target/coldfire/wmcodec-coldfire.c
 target/coldfire/mpio/fmradio_i2c-mpio.c
 #endif /* BOOTLOADER */
 #endif /* SIMULATOR */
+#endif
+
+
+#if (CONFIG_PLATFORM & PLATFORM_ANDROID)
+target/hosted/android/fs-android.c
+target/hosted/android/lcd-android.c
+target/hosted/android/lc-android.c
+target/hosted/android/button-android.c
+#ifdef DEBUG
+target/hosted/android/debug-android.c
+#endif
+target/hosted/android/kernel-android.c
+target/hosted/android/pcm-android.c
+target/hosted/android/powermgmt-android.c
+target/hosted/android/system-android.c
+#ifdef APPLICATION
+target/hosted/android/app/button-application.c
+#endif
+drivers/audio/android.c
+thread.c
 #endif

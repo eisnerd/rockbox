@@ -25,6 +25,7 @@
 #include <QMainWindow>
 #include <QLabel>
 #include <QItemSelectionModel>
+#include <QDockWidget>
 
 #include "parsetreemodel.h"
 #include "skinhighlighter.h"
@@ -33,6 +34,8 @@
 #include "preferencesdialog.h"
 #include "skinviewer.h"
 #include "devicestate.h"
+#include "skintimer.h"
+#include "targetdata.h"
 
 class ProjectModel;
 class TabContent;
@@ -46,6 +49,8 @@ class EditorWindow : public QMainWindow
 {
     Q_OBJECT
 public:
+    static const int numRecent;
+
     EditorWindow(QWidget *parent = 0);
     virtual ~EditorWindow();
 
@@ -62,16 +67,27 @@ public slots:
 private slots:
     void showPanel();
     void newTab();
+    void newProject();
     void shiftTab(int index);
     bool closeTab(int index);
     void closeCurrent();
+    void closeProject();
     void saveCurrent();
     void saveCurrentAs();
+    void exportProject();
     void openFile();
     void openProject();
+    void openRecentFile();
+    void openRecentProject();
     void tabTitleChanged(QString title);
     void updateCurrent(); /* Generates code in the current tab */
     void lineChanged(int line); /* Used for auto-expand */
+    void undo();
+    void redo();
+    void cut();
+    void copy();
+    void paste();
+    void findReplace();
 
 private:
     /* Setup functions */
@@ -79,9 +95,19 @@ private:
     void saveSettings();
     void setupUI();
     void setupMenus();
+
     void addTab(TabContent* doc);
-    void expandLine(ParseTreeModel* model, QModelIndex parent, int line);
+    void expandLine(ParseTreeModel* model, QModelIndex parent, int line,
+                    bool highlight);
     void sizeColumns();
+
+    void loadProjectFile(QString fileName);
+    static void createFile(QString filename, QString contents);
+
+    /* Functions to manipulate the recent projects/documents menus */
+    void docToTop(QString file);
+    void projectToTop(QString file);
+    void refreshRecentMenus();
 
     Ui::EditorWindow *ui;
     PreferencesDialog* prefs;
@@ -89,7 +115,15 @@ private:
     ProjectModel* project;
     QItemSelectionModel* parseTreeSelection;
     SkinViewer* viewer;
-    DeviceState deviceConfig;
+    DeviceState* deviceConfig;
+    QDockWidget* deviceDock;
+    SkinTimer* timer;
+    QDockWidget* timerDock;
+
+    QStringList recentDocs;
+    QStringList recentProjects;
+    QList<QAction*> recentDocsMenu;
+    QList<QAction*> recentProjectsMenu;
 };
 
 #endif // EDITORWINDOW_H

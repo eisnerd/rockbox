@@ -32,8 +32,6 @@
 //    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 //    Library General Public License for more details.
 
-#ifndef SIMULATOR
-
 #include <inttypes.h>
 #include "codeclib.h"
 
@@ -2095,8 +2093,8 @@ STATICIRAM void to_mono_mm(void)
 
     inline void to_mono(uint16_t **samp)
     {
-        int16_t r = **samp;
-        int16_t l = *(*samp+1);
+        int16_t l = **samp;
+        int16_t r = *(*samp+1);
         int32_t m;
 
         switch(cfg.rec_mono_mode)
@@ -2637,5 +2635,3 @@ enum codec_status codec_main(void)
 
     return CODEC_OK;
 } /* codec_start */
-
-#endif /* ndef SIMULATOR */

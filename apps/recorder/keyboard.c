@@ -47,6 +47,12 @@
 #define DEFAULT_MARGIN 6
 #define KBD_BUF_SIZE 500
 
+#ifdef HAVE_TOUCHSCREEN
+#define MIN_GRID_SIZE   16
+#define GRID_SIZE(s, x)   \
+        ((s) == SCREEN_MAIN && MIN_GRID_SIZE > (x) ? MIN_GRID_SIZE: (x))
+#endif
+
 #if (CONFIG_KEYPAD == IRIVER_H100_PAD) \
     || (CONFIG_KEYPAD == IRIVER_H300_PAD) \
     || (CONFIG_KEYPAD == IPOD_1G2G_PAD) \
@@ -73,7 +79,8 @@ struct keyboard_parameters
     unsigned short kbd_buf[KBD_BUF_SIZE];
     unsigned short max_line_len;
     int default_lines;
-    int nchars;
+    int last_k;
+    int last_i;
     int font_w;
     int font_h;
     int text_w;
@@ -93,6 +100,9 @@ struct keyboard_parameters
     int x;
     int y;
     bool line_edit;
+#ifdef HAVE_TOUCHSCREEN
+    bool show_buttons;
+#endif
 };
 
 struct edit_state
@@ -134,6 +144,7 @@ int load_kbd(unsigned char* filename)
     int fd, l;
     int i, line_len, max_line_len;
     unsigned char buf[4];
+    unsigned short *pbuf;
 
     if (filename == NULL)
     {
@@ -145,10 +156,11 @@ int load_kbd(unsigned char* filename)
     if (fd < 0)
         return 1;
 
+    pbuf = kbd_param[0].kbd_buf;
     line_len = 0;
     max_line_len = 1;
-    i = 0;
-    while (read(fd, buf, 1) == 1 && i < KBD_BUF_SIZE)
+    i = 1;
+    while (read(fd, buf, 1) == 1 && i < KBD_BUF_SIZE-1)
     {
         /* check how many bytes to read for this character */
         static const unsigned char sizes[4] = { 0x80, 0xe0, 0xf0, 0xf5 };
@@ -174,17 +186,17 @@ int load_kbd(unsigned char* filename)
         utf8decode(buf, &ch);
         if (ch != 0xFEFF && ch != '\r') /* skip BOM & carriage returns */
         {
-            FOR_NB_SCREENS(l)
-                kbd_param[l].kbd_buf[i] = ch;
             i++;
             if (ch == '\n')
             {
                 if (max_line_len < line_len)
                     max_line_len = line_len;
+                *pbuf = line_len;
+                pbuf += line_len + 1;
                 line_len = 0;
             }
             else
-                line_len++;
+                pbuf[++line_len] = ch;
         }
     }
 
@@ -193,11 +205,20 @@ int load_kbd(unsigned char* filename)
 
     if (max_line_len < line_len)
         max_line_len = line_len;
-
+    if (i == 1 || line_len != 0) /* ignore last empty line */
+    {
+        *pbuf = line_len;
+        pbuf += line_len + 1;
+    }
+    *pbuf = 0xFEFF; /* mark end of characters */
+    i++;
     FOR_NB_SCREENS(l)
     {
         struct keyboard_parameters *pm = &kbd_param[l];
-        pm->nchars = i;
+#if NB_SCREENS > 1
+        if (l > 0)
+            memcpy(pm->kbd_buf, kbd_param[0].kbd_buf, i*sizeof(unsigned short));
+#endif
         /* initialize parameters */
         pm->x = pm->y = pm->page = 0;
         pm->default_lines = 0;
@@ -260,10 +281,28 @@ static void kbd_delchar(struct edit_state *state)
 }
 
 /* Lookup k value based on state of param (pm) */
-static unsigned short get_kbd_ch(const struct keyboard_parameters *pm)
+static unsigned short get_kbd_ch(struct keyboard_parameters *pm, int x, int y)
 {
-    int k = (pm->page*pm->lines + pm->y)*pm->max_chars + pm->x;
-    return (k < pm->nchars)? pm->kbd_buf[k]: ' ';
+    int i = 0, k = pm->page*pm->lines + y, n;
+    unsigned short *pbuf;
+    if (k >= pm->last_k)
+    {
+        i = pm->last_i;
+        k -= pm->last_k;
+    }
+    for (pbuf = &pm->kbd_buf[i]; (i = *pbuf) != 0xFEFF; pbuf += i + 1)
+    {
+        n = i ? (i + pm->max_chars - 1) / pm->max_chars : 1;
+        if (k < n) break;
+        k -= n;
+    }
+    if (y == 0 && i != 0xFEFF)
+    {
+        pm->last_k = pm->page*pm->lines - k;
+        pm->last_i = pbuf - pm->kbd_buf;
+    }
+    k = k * pm->max_chars + x;
+    return (*pbuf != 0xFEFF && k < *pbuf)? pbuf[k+1]: ' ';
 }
 
 static void kbd_calc_params(struct keyboard_parameters *pm,
@@ -272,6 +311,11 @@ static void kbd_draw_picker(struct keyboard_parameters *pm,
                             struct screen *sc, struct edit_state *state);
 static void kbd_draw_edit_line(struct keyboard_parameters *pm,
                                struct screen *sc, struct edit_state *state);
+#ifdef HAVE_TOUCHSCREEN
+static void kbd_draw_buttons(struct keyboard_parameters *pm, struct screen *sc);
+static int keyboard_touchscreen(struct keyboard_parameters *pm,
+                                struct screen *sc, struct edit_state *state);
+#endif
 static void kbd_insert_selected(struct keyboard_parameters *pm,
                                 struct edit_state *state);
 static void kbd_backspace(struct edit_state *state);
@@ -284,12 +328,7 @@ static void kbd_move_picker_vertical(struct keyboard_parameters *pm,
 int kbd_input(char* text, int buflen)
 {
     bool done = false;
-#ifdef CPU_ARM
-    /* This seems to keep the sizes for ARM way down */
-    struct keyboard_parameters * volatile param = kbd_param;
-#else
     struct keyboard_parameters * const param = kbd_param;
-#endif
     struct edit_state state;
     int l; /* screen loop variable */
     unsigned short ch;
@@ -327,8 +366,9 @@ int kbd_input(char* text, int buflen)
         FOR_NB_SCREENS(l)
         {
             struct keyboard_parameters *pm = &param[l];
+            unsigned short *pbuf;
             const unsigned char *p;
-            int i = 0;
+            int len = 0;
 
 #if LCD_WIDTH >= 160 && LCD_HEIGHT >= 96
             struct screen *sc = &screens[l];
@@ -369,10 +409,22 @@ int kbd_input(char* text, int buflen)
                 pm->max_line_len = 18;
             }
 
+            pbuf = pm->kbd_buf;
             while (*p)
-                p = utf8decode(p, &pm->kbd_buf[i++]);
+            {
+                p = utf8decode(p, &pbuf[len+1]);
+                if (pbuf[len+1] == '\n')
+                {
+                    *pbuf = len;
+                    pbuf += len+1;
+                    len = 0;
+                }
+                else
+                    len++;
+            }
+            *pbuf = len;
+            pbuf[len+1] = 0xFEFF;   /* mark end of characters */
 
-            pm->nchars = i;
             /* initialize parameters */
             pm->x = pm->y = pm->page = 0;
         }
@@ -401,7 +453,6 @@ int kbd_input(char* text, int buflen)
         const int button_screen = 0;
 #endif
         struct keyboard_parameters *pm;
-        struct screen *sc;
 
         state.len_utf8 = utf8length(state.text);
 
@@ -414,6 +465,10 @@ int kbd_input(char* text, int buflen)
             sc->clear_display();
             kbd_draw_picker(pm, sc, &state);
             kbd_draw_edit_line(pm, sc, &state);
+#ifdef HAVE_TOUCHSCREEN
+            if (pm->show_buttons)
+                kbd_draw_buttons(pm, sc);
+#endif
         }
 
 #ifdef HAVE_BUTTONBAR
@@ -436,7 +491,13 @@ int kbd_input(char* text, int buflen)
         button_screen = (get_action_statuscode(NULL) & ACTION_REMOTE) ? 1 : 0;
 #endif
         pm = &param[button_screen];
-        sc = &screens[button_screen];
+#ifdef HAVE_TOUCHSCREEN
+        if (button == ACTION_TOUCHSCREEN)
+        {
+            struct screen *sc = &screens[button_screen];
+            button = keyboard_touchscreen(pm, sc, &state);
+        }
+#endif
 
         /* Remap some buttons to allow to move
          * cursor in line edit mode and morse mode. */
@@ -606,7 +667,7 @@ int kbd_input(char* text, int buflen)
                 if (!state.morse_mode)
 #endif
                 {
-                    ch = get_kbd_ch(pm);
+                    ch = get_kbd_ch(pm, pm->x, pm->y);
                     kbd_spellchar(ch);
                 }
             }
@@ -649,9 +710,15 @@ static void kbd_calc_params(struct keyboard_parameters *pm,
 {
     struct font* font;
     const unsigned char *p;
-    unsigned short ch;
+    unsigned short ch, *pbuf;
     int icon_w, sc_w, sc_h, w;
     int i, total_lines;
+#ifdef HAVE_TOUCHSCREEN
+    int button_h = 0;
+    bool flippage_button = false;
+    pm->show_buttons = (sc->screen_type == SCREEN_MAIN &&
+                                (touchscreen_get_mode() == TOUCHSCREEN_POINT));
+#endif
 
     pm->curfont = pm->default_lines ? FONT_SYSFIXED : FONT_UI;
     font = font_get(pm->curfont);
@@ -664,16 +731,19 @@ static void kbd_calc_params(struct keyboard_parameters *pm,
         font = font_get(FONT_SYSFIXED);
         pm->font_h = font->height;
     }
+#ifdef HAVE_TOUCHSCREEN
+    pm->font_h = GRID_SIZE(sc->screen_type, pm->font_h);
+#endif
 
     /* find max width of keyboard glyphs.
      * since we're going to be adding spaces,
      * max width is at least their width */
     pm->font_w = font_get_width(font, ' ');
-    for (i = 0; i < pm->nchars; i++)
+    for (pbuf = pm->kbd_buf; *pbuf != 0xFEFF; pbuf += i)
     {
-        if (pm->kbd_buf[i] != '\n')
+        for (i = 0; ++i <= *pbuf; )
         {
-            w = font_get_width(font, pm->kbd_buf[i]);
+            w = font_get_width(font, pbuf[i]);
             if (pm->font_w < w)
                 pm->font_w = w;
         }
@@ -690,6 +760,9 @@ static void kbd_calc_params(struct keyboard_parameters *pm,
             pm->text_w = w;
     }
 
+#ifdef HAVE_TOUCHSCREEN
+    pm->font_w = GRID_SIZE(sc->screen_type, pm->font_w);
+#endif
     /* calculate how many characters to put in a row. */
     icon_w = get_icon_width(sc->screen_type);
     sc_w = sc->getwidth();
@@ -700,56 +773,18 @@ static void kbd_calc_params(struct keyboard_parameters *pm,
     if (pm->max_chars_text < 3 && icon_w > pm->text_w)
         pm->max_chars_text = sc_w / pm->text_w - 2;
 
-
-    i = 0;
-    /* Pad lines with spaces */
-    while (i < pm->nchars)
-    {
-        if (pm->kbd_buf[i] == '\n')
-        {
-            int k = pm->max_chars - i % ( pm->max_chars ) - 1;
-            int j;
-
-            if (k == pm->max_chars - 1)
-            {
-                pm->nchars--;
-
-                for (j = i; j < pm->nchars; j++)
-                {
-                    pm->kbd_buf[j] = pm->kbd_buf[j + 1];
-                }
-            }
-            else
-            {
-                if (pm->nchars + k - 1 >= KBD_BUF_SIZE)
-                {   /* We don't want to overflow the buffer */
-                    k = KBD_BUF_SIZE - pm->nchars;
-                }
-
-                for (j = pm->nchars + k - 1; j > i + k; j--)
-                {
-                    pm->kbd_buf[j] = pm->kbd_buf[j-k];
-                }
-
-                pm->nchars += k;
-                k++;
-
-                while (k--)
-                {
-                    pm->kbd_buf[i++] = ' ';
-                }
-            }
-        }
-        else
-        {
-            i++;
-        }
-    }
-    if (pm->nchars == 0)
-        pm->kbd_buf[pm->nchars++] = ' ';
-
     /* calculate pm->pages and pm->lines */
     sc_h = sc->getheight();
+#ifdef HAVE_TOUCHSCREEN
+    /* add space for buttons */
+    if (pm->show_buttons)
+    {
+        /* reserve place for OK/Del/Cancel buttons, use ui font for them */
+        button_h = GRID_SIZE(sc->screen_type, sc->getcharheight());
+        sc_h -= MAX(MIN_GRID_SIZE*2, button_h);
+    }
+recalc_param:
+#endif
     pm->lines = (sc_h - BUTTONBAR_HEIGHT) / pm->font_h - 1;
 
     if (pm->default_lines && pm->lines > pm->default_lines)
@@ -767,12 +802,31 @@ static void kbd_calc_params(struct keyboard_parameters *pm,
     if (pm->keyboard_margin > DEFAULT_MARGIN)
         pm->keyboard_margin = DEFAULT_MARGIN;
 
-    total_lines = (pm->nchars + pm->max_chars - 1) / pm->max_chars;
+    total_lines = 0;
+    for (pbuf = pm->kbd_buf; (i = *pbuf) != 0xFEFF; pbuf += i + 1)
+        total_lines += (i ? (i + pm->max_chars - 1) / pm->max_chars : 1);
+
     pm->pages = (total_lines + pm->lines - 1) / pm->lines;
     pm->lines = (total_lines + pm->pages - 1) / pm->pages;
+#ifdef HAVE_TOUCHSCREEN
+    if (pm->pages > 1 && pm->show_buttons && !flippage_button)
+    {
+        /* add space for flip page button */
+        sc_h -= button_h;
+        flippage_button = true;
+        goto recalc_param;
+    }
+#endif
+    if (pm->page >= pm->pages)
+        pm->x = pm->y = pm->page = 0;
 
     pm->main_y = pm->font_h*pm->lines + pm->keyboard_margin;
     pm->keyboard_margin -= pm->keyboard_margin/2;
+#ifdef HAVE_TOUCHSCREEN
+    /* flip page button is put between piker and edit line */
+    if (flippage_button)
+        pm->main_y += button_h;
+#endif
 
 #ifdef HAVE_MORSE_INPUT
     pm->old_main_y = sc_h - pm->font_h - BUTTONBAR_HEIGHT;
@@ -841,28 +895,24 @@ static void kbd_draw_picker(struct keyboard_parameters *pm,
 #endif /* HAVE_MORSE_INPUT */
     {
         /* draw page */
-        int i, j, k;
+        int i, j;
+        int w, h;
+        unsigned short ch;
+        unsigned char *utf8;
 
         sc->setfont(pm->curfont);
 
-        k = pm->page*pm->max_chars*pm->lines;
-
-        for (i = j = 0; k < pm->nchars; k++)
+        for (j = 0; j < pm->lines; j++)
         {
-            int w;
-            unsigned char *utf8;
-            utf8 = utf8encode(pm->kbd_buf[k], outline);
-            *utf8 = 0;
-
-            sc->getstringsize(outline, &w, NULL);
-            sc->putsxy(i*pm->font_w + (pm->font_w-w) / 2,
-                       j*pm->font_h, outline);
-
-            if (++i >= pm->max_chars)
+            for (i = 0; i < pm->max_chars; i++)
             {
-                i = 0;
-                if (++j >= pm->lines)
-                    break;
+                ch = get_kbd_ch(pm, i, j);
+                utf8 = utf8encode(ch, outline);
+                *utf8 = 0;
+
+                sc->getstringsize(outline, &w, &h);
+                sc->putsxy(i*pm->font_w + (pm->font_w-w) / 2,
+                           j*pm->font_h + (pm->font_h-h) / 2, outline);
             }
         }
 
@@ -961,12 +1011,119 @@ static void kbd_draw_edit_line(struct keyboard_parameters *pm,
     }
 }
 
+#ifdef HAVE_TOUCHSCREEN
+static void kbd_draw_buttons(struct keyboard_parameters *pm, struct screen *sc)
+{
+    struct viewport vp;
+    int button_h, text_h, text_y;
+    int sc_w = sc->getwidth(), sc_h = sc->getheight();
+    viewport_set_defaults(&vp, sc->screen_type);
+    vp.flags |= VP_FLAG_ALIGN_CENTER;
+    sc->set_viewport(&vp);
+    text_h = sc->getcharheight();
+    button_h = GRID_SIZE(sc->screen_type, text_h);
+    text_y = (button_h - text_h) / 2 + 1;
+    vp.x = 0;
+    vp.y = 0;
+    vp.width = sc_w;
+    vp.height = button_h;
+    /* draw buttons */
+    if (pm->pages > 1)
+    {
+        /* button to flip page. */
+        vp.y = pm->lines*pm->font_h;
+        sc->hline(0, sc_w - 1, 0);
+        sc->putsxy(0, text_y, ">");
+    }
+    /* OK/Del/Cancel buttons */
+    button_h = MAX(MIN_GRID_SIZE*2, button_h);
+    text_y = (button_h - text_h) / 2 + 1;
+    vp.y = sc_h - button_h - 1;
+    vp.height = button_h;
+    sc->hline(0, sc_w - 1, 0);
+    vp.width = sc_w/3;
+    sc->putsxy(0, text_y, str(LANG_KBD_OK));
+    vp.x += vp.width;
+    sc->vline(0, 0, button_h);
+    sc->putsxy(0, text_y, str(LANG_KBD_DELETE));
+    vp.x += vp.width;
+    sc->vline(0, 0, button_h);
+    sc->putsxy(0, text_y, str(LANG_KBD_CANCEL));
+    sc->set_viewport(NULL);
+}
+
+static int keyboard_touchscreen(struct keyboard_parameters *pm,
+                                struct screen *sc, struct edit_state *state)
+{
+    short x, y;
+    const int button = action_get_touchscreen_press(&x, &y);
+    const int sc_w = sc->getwidth(), sc_h = sc->getheight();
+    int button_h = MAX(MIN_GRID_SIZE*2, sc->getcharheight());
+#ifdef HAVE_MORSE_INPUT
+    if (state->morse_mode && y < pm->main_y - pm->keyboard_margin)
+    {
+        /* don't return ACTION_NONE since it has effect in morse mode. */
+        return button == BUTTON_TOUCHSCREEN? ACTION_KBD_SELECT:
+               button & BUTTON_REL? ACTION_KBD_MORSE_SELECT: ACTION_STD_OK;
+    }
+#else
+    (void) state;
+#endif
+    if (x < 0 || y < 0)
+        return ACTION_NONE;
+    if (y < pm->lines*pm->font_h)
+    {
+        if (x/pm->font_w < pm->max_chars)
+        {
+            /* picker area */
+            state->changed = CHANGED_PICKER;
+            pm->x = x/pm->font_w;
+            pm->y = y/pm->font_h;
+            pm->line_edit = false;
+            if (button == BUTTON_REL)
+                return ACTION_KBD_SELECT;
+        }
+    }
+    else if (y < pm->main_y - pm->keyboard_margin)
+    {
+        /* button to flip page */
+        if (button == BUTTON_REL)
+            return ACTION_KBD_PAGE_FLIP;
+    }
+    else if (y < sc_h - button_h)
+    {
+        /* edit line */
+        if (button & (BUTTON_REPEAT|BUTTON_REL))
+        {
+            if (x < sc_w/2)
+                return ACTION_KBD_CURSOR_LEFT;
+            else
+                return ACTION_KBD_CURSOR_RIGHT;
+        }
+    }
+    else
+    {
+        /* OK/Del/Cancel button */
+        if (button == BUTTON_REL)
+        {
+            if (x < sc_w/3)
+                return ACTION_KBD_DONE;
+            else if (x < (sc_w/3) * 2)
+                return ACTION_KBD_BACKSPACE;
+            else
+                return ACTION_KBD_ABORT;
+        }
+    }
+    return ACTION_NONE;
+}
+#endif
+
 /* inserts the selected char */
 static void kbd_insert_selected(struct keyboard_parameters *pm,
                                 struct edit_state *state)
 {
     /* find input char */
-    unsigned short ch = get_kbd_ch(pm);
+    unsigned short ch = get_kbd_ch(pm, pm->x, pm->y);
 
     /* check for hangul input */
     if (ch >= 0x3131 && ch <= 0x3163)

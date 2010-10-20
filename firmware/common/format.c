@@ -25,10 +25,11 @@
 #include <limits.h>
 #include <string.h>
 #include "file.h"
+#include "format.h"
 
 static const char hexdigit[] = "0123456789ABCDEF";
 
-int format(
+void format(
     /* call 'push()' for each output letter */
     int (*push)(void *userp, unsigned char data),
     void *userp,
@@ -41,6 +42,8 @@ int format(
     long lval, lsign;
     unsigned int uval;
     unsigned long ulval;
+    size_t uszval;
+    ssize_t szval, szsign;
     bool ok = true;
 
     tmpbuf[sizeof tmpbuf - 1] = '\0';
@@ -122,7 +125,6 @@ int format(
             break;
 
         case 'l':
-        case 'z': /* assume sizeof(size_t) == sizeof(long) */
             ch = *fmt++;
             switch(ch) {
                 case 'x':
@@ -167,6 +169,40 @@ int format(
 
             break;
 
+        case 'z':
+            ch = *fmt++;
+            switch(ch) {
+                case 'd':
+                    szval = szsign = va_arg (ap, ssize_t);
+                    if (szval < 0)
+                        szval = -szval;
+                    do
+                    {
+                        *--str = (szval % 10) + '0';
+                        szval /= 10;
+                    }
+                    while (szval > 0);
+                    if (szsign < 0)
+                        *--str = '-';
+                    break;
+
+                case 'u':
+                    uszval = va_arg(ap, size_t);
+                    do
+                    {
+                        *--str = (uszval % 10) + '0';
+                        uszval /= 10;
+                    }
+                    while (uszval > 0);
+                    break;
+
+                default:
+                    *--str = 'z';
+                    *--str = ch;
+            }
+
+            break;
+
         default:
             *--str = ch;
             break;
@@ -184,7 +220,6 @@ int format(
     else
         ok=push(userp, ch);
     }
-    return ok; /* true means good */
 }
 
 struct for_fprintf {
@@ -208,7 +243,6 @@ static int fprfunc(void *pr, unsigned char letter)
 
 int fdprintf(int fd, const char *fmt, ...)
 {
-    bool ok;
     va_list ap;
     struct for_fprintf fpr;
 
@@ -216,13 +250,13 @@ int fdprintf(int fd, const char *fmt, ...)
     fpr.bytes=0;
 
     va_start(ap, fmt);
-    ok = format(fprfunc, &fpr, fmt, ap);
+    format(fprfunc, &fpr, fmt, ap);
     va_end(ap);
 
     return fpr.bytes; /* return 0 on error */
 }
 
-int vuprintf(int (*push)(void *userp, unsigned char data), void *userp, const char *fmt, va_list ap)
+void vuprintf(int (*push)(void *userp, unsigned char data), void *userp, const char *fmt, va_list ap)
 {
-    return format(push, userp, fmt, ap);
+    format(push, userp, fmt, ap);
 }

@@ -27,6 +27,7 @@
 #include "kernel.h"
 #include "cpu.h"
 #include "string.h"
+#include "buffer.h"
 #ifdef RB_PROFILE
 #include <profile.h>
 #endif
@@ -123,8 +124,13 @@ static struct core_entry cores[NUM_CORES] IBSS_ATTR;
 struct thread_entry threads[MAXTHREADS] IBSS_ATTR;
 
 static const char main_thread_name[] = "main";
+#if (CONFIG_PLATFORM & PLATFORM_NATIVE)
 extern uintptr_t stackbegin[];
 extern uintptr_t stackend[];
+#else
+extern uintptr_t *stackbegin;
+extern uintptr_t *stackend;
+#endif
 
 static inline void core_sleep(IF_COP_VOID(unsigned int core))
         __attribute__((always_inline));
@@ -170,7 +176,9 @@ void switch_thread(void)
 /****************************************************************************
  * Processor-specific section - include necessary core support
  */
-#if defined(CPU_ARM)
+#if defined(ANDROID)
+#include "thread-android-arm.c"
+#elif defined(CPU_ARM)
 #include "thread-arm.c"
 #if defined (CPU_PP)
 #include "thread-pp.c"
@@ -1150,8 +1158,18 @@ void switch_thread(void)
     store_context(&thread->context);
 
     /* Check if the current thread stack is overflown */
-    if (UNLIKELY(thread->stack[0] != DEADBEEF))
+    if (UNLIKELY(thread->stack[0] != DEADBEEF) && thread->stack_size > 0)
         thread_stkov(thread);
+
+#ifdef BUFFER_ALLOC_DEBUG
+    /* Check if the current thread just did bad things with buffer_alloc()ed
+     * memory */
+    {
+        static char name[32];
+        thread_get_name(name, 32, thread);
+        buffer_alloc_check(name);
+    }
+#endif
 
 #if NUM_CORES > 1
     /* Run any blocking operations requested before switching/sleeping */
@@ -2319,7 +2337,9 @@ static int stack_usage(uintptr_t *stackptr, size_t stack_size)
  */
 int thread_stack_usage(const struct thread_entry *thread)
 {
-    return stack_usage(thread->stack, thread->stack_size);
+    if (LIKELY(thread->stack_size > 0))
+        return stack_usage(thread->stack, thread->stack_size);
+    return 0;
 }
 
 #if NUM_CORES > 1

@@ -27,25 +27,33 @@
 class RBScreen;
 class ProjectModel;
 class ParseTreeModel;
+class DeviceState;
+class SkinDocument;
 
 class RBRenderInfo
 {
 public:
     RBRenderInfo(ParseTreeModel* model,  ProjectModel* project,
-                 QMap<QString, QString>* settings, RBScreen* screen);
+                 SkinDocument* doc, QMap<QString, QString>* settings,
+                 DeviceState* device, RBScreen* screen);
+    RBRenderInfo();
     RBRenderInfo(const RBRenderInfo& other);
     virtual ~RBRenderInfo();
 
     const RBRenderInfo& operator=(const RBRenderInfo& other);
 
     ProjectModel* project() const{ return mProject; }
+    DeviceState* device() const{ return mDevice; }
+    SkinDocument* document() const{ return mDoc; }
     QMap<QString, QString>* settings() const{ return mSettings; }
     RBScreen* screen() const{ return mScreen; }
     ParseTreeModel* model() const{ return mModel; }
 
 private:
     ProjectModel* mProject;
+    SkinDocument* mDoc;
     QMap<QString, QString>* mSettings;
+    DeviceState* mDevice;
     RBScreen* mScreen;
     ParseTreeModel* mModel;
 };

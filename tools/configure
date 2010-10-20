@@ -9,15 +9,27 @@
 #
 
 # global CC options for all platforms
-CCOPTS="-W -Wall -Wundef -O -nostdlib -ffreestanding -Wstrict-prototypes -pipe"
+CCOPTS="-W -Wall -Wundef -O -nostdlib -ffreestanding -Wstrict-prototypes -pipe -std=gnu99"
 
+# global LD options for all platforms
+GLOBAL_LDOPTS=""
+
+extradefines=""
 use_logf="#undef ROCKBOX_HAS_LOGF"
 use_bootchart="#undef DO_BOOTCHART"
 
 scriptver=`echo '$Revision$' | sed -e 's:\\$::g' -e 's/Revision: //'`
 
-rbdir=".rockbox"
-  
+rbdir="/.rockbox"
+need_full_path=
+bindir=
+libdir=
+bindir_full=
+libdir_full=
+
+app_platform=
+app_lcd_width=
+app_lcd_height=
 #
 # Begin Function Definitions
 #
@@ -39,21 +51,86 @@ prefixtools () {
  OC=${prefix}objcopy
 }
 
-findarmgcc() {
-  models_not_checked_with_eabi="ipod4g vibe500 cowond2"
-  if [ "$ARG_ARM_EABI" != 1 ]; then # eabi not explicitely enabled
-    for model in $models_not_checked_with_eabi; do
-      if [ "$modelname" = "$model" ]; then
-        ARG_ARM_EABI="0"
-        echo "**************************************************************"
-        echo "**** Target $modelname is using non EABI compiler !"
-        echo "**** Please test a build with --eabi and enable"
-        echo "**** EABI compiler for this target"
-        echo "**************************************************************"
-      fi
-    done
-  fi
+app_get_platform() {
+    echo "Select your platform: (S)DL, (A)ndroid (default: Android)"
+    if [ -z "$ARG_PLATFORM" ]; then
+        choice=`input`
+    else
+        choice="$ARG_PLATFORM"
+    fi
 
+    case $choice in
+        s|S*)     app_platform="sdl" ;;
+        *|a|A*)   app_platform="android" ;;
+    esac
+
+    echo "Selected $app_platform platform"
+    echo "Enter the LCD width (default: 320)"
+    if [ -z "$ARG_LCDWIDTH" ]; then
+        app_lcd_width=`input`
+    else
+        app_lcd_width="$ARG_LCDWIDTH"
+    fi
+    if [ -z "$app_lcd_width" ]; then app_lcd_width="320"; fi
+    echo "Enter the LCD height (default: 480)"
+    if [ -z "$ARG_LCDHEIGHT" ]; then
+        app_lcd_height=`input`
+    else
+        app_lcd_height="$ARG_LCDHEIGHT"
+    fi
+    if [ -z "$app_lcd_height" ]; then app_lcd_height="480"; fi
+    echo "Selected $app_lcd_width x $app_lcd_height resolution"
+    ARG_LCDWIDTH=$app_lcd_width
+    ARG_LCDHEIGHT=$app_lcd_height
+
+    app_lcd_width="#define LCD_WIDTH $app_lcd_width"
+    app_lcd_height="#define LCD_HEIGHT $app_lcd_height"
+    # setup files and paths depending on the platform
+    if [ "$app_platform" = "sdl" ]; then
+        if [ -z "$PREFIX" ]; then
+            rbdir="/usr/local/share/rockbox"
+            bindir="/usr/local/bin"
+            bindir_full=$bindir
+            libdir="/usr/local/lib"
+            libdir_full=$libdir
+        else
+            rbdir=`realpath $PREFIX/share/rockbox`
+            bindir="$PREFIX/bin"
+            libdir="$PREFIX/lib"
+            if [ -d bindir ]; then
+                bindir_full=`realpath $bindir`
+            fi
+            if [ -d libdir ]; then
+                libdir_full=`realpath $libdir`
+            fi
+        fi        
+        output="rockbox"
+        bootoutput="rockbox"
+    elif [ "$app_platform" = "android" ]; then
+        if [ -n "$PREFIX" ]; then
+            echo "WARNING: PREFIX not supported on Android. You can however use --rbdir"
+        fi
+        if [ -z "$ANDROID_SDK_PATH" ]; then
+            echo "ERROR: You need the Android SDK installed and have the ANDROID_SDK_PATH"
+            echo "environment variable point to the root directory of the Android SDK."
+            exit
+        fi
+        if [ -z "$ANDROID_NDK_PATH" ]; then
+            echo "ERROR: You need the Android NDK installed and have the ANDROID_NDK_PATH"
+            echo "environment variable point to the root directory of the Android NDK."
+            exit
+        fi
+        rbdir="/data/data/org.rockbox/app_rockbox/rockbox"
+        bindir="/data/data/org.rockbox/lib"
+        bindir_full=$bindir
+        libdir="/data/data/org.rockbox/app_rockbox"
+        libdir_full=$libdir
+        output="librockbox.so"
+        bootoutput="librockbox.so"
+    fi
+}
+
+findarmgcc() {
   if [ "$ARG_ARM_EABI" != "0" ]; then
     prefixtools arm-elf-eabi-
     gccchoice="4.4.4"
@@ -108,51 +185,70 @@ findsdl(){
   done
 }
 
+appcc () {
+    if [ "$1" = "sdl" ]; then
+        simcc "sdl-app"
+    elif [ "$1" = "android" ]; then
+        app_type=$1
+        androidcc
+    fi
+}
+
 simcc () {
 
  # default tool setup for native building
  prefixtools "$CROSS_COMPILE"
  ARG_ARM_THUMB=0 # can't use thumb in native builds
 
- simver=sdl
- winbuild="$crosscompile"
+ app_type=$1
+ winbuild=""
  GCCOPTS='-W -Wall -g -fno-builtin'
  GCCOPTIMIZE=''
- LDOPTS=''
+ LDOPTS='-lm' # button-sdl.c uses sqrt()
 
- # default output binary name
- output="rockboxui"
+ # default output binary name, don't override app_get_platform()
+ if [ "$app_type" != "sdl-app" ]; then
+    output="rockboxui"
+ fi
 
  # default share option, override below if needed
  SHARED_FLAG="-shared"
 
+ if [ "$win32crosscompile" = "yes" ]; then
+   LDOPTS="$LDOPTS -mconsole"
+   output="$output.exe"
+   winbuild="yes"
+ else
  case $uname in
    CYGWIN*)
    echo "Cygwin host detected"
 
-   LDOPTS="-mconsole"
-   output="rockboxui.exe"
+   LDOPTS="$LDOPTS -mconsole"
+   output="$output.exe"
    winbuild="yes"
    ;;
 
    MINGW*)
    echo "MinGW host detected"
 
-   LDOPTS="-mconsole"
-   output="rockboxui.exe"
+   LDOPTS="$LDOPTS -mconsole"
+   output="$output.exe"
    winbuild="yes"
    ;;
 
    Linux)
    echo "Linux host detected"
+   LDOPTS="$LDOPTS -ldl"
    ;;
 
    FreeBSD)
    echo "FreeBSD host detected"
+   LDOPTS="$LDOPTS -ldl"
    ;;
 
    Darwin)
    echo "Darwin host detected"
+   LDOPTS="$LDOPTS -ldl"
 
    SHARED_FLAG="-dynamiclib -Wl\,-single_module"
    ;;
@@ -161,7 +257,7 @@ simcc () {
    echo "*Solaris host detected"
 
    GCCOPTS="$GCCOPTS -fPIC"
-   LDOPTS="-lm"
+   LDOPTS="$LDOPTS -ldl"
    ;;
 
    *)
@@ -169,10 +265,12 @@ simcc () {
    exit 1
    ;;
  esac
+ fi
 
+ [ "$winbuild" != "yes" ] && GLOBAL_LDOPTS="$GLOBAL_LDOPTS -Wl,-z,defs"
  sdl=`findsdl $winbuild`
 
- if [ $1 = "sdl" ]; then
+ if [ -n `echo $app_type | grep "sdl"` ]; then
     if [ -z "$sdl" ]; then
         echo "configure didn't find sdl-config, which indicates that you"
         echo "don't have SDL (properly) installed. Please correct and"
@@ -184,10 +282,11 @@ simcc () {
         LDOPTS="$LDOPTS `$sdl --libs`"
     fi
  fi
+ 
 
  GCCOPTS="$GCCOPTS -I\$(SIMDIR)"
 
- if test "X$crosscompile" != "Xyes"; then
+ if test "X$win32crosscompile" != "Xyes"; then
    case `uname -m` in
     x86_64|amd64)
       # fPIC is needed to make shared objects link
@@ -234,9 +333,11 @@ EOF
      echo "WARNING: Cross Compiling, cannot detect endianess. Assuming little endian!"
    fi
 
-   if [ $1 = "sdl" ]; then
+   if [ "$app_type" = "sdl-sim" ]; then
      echo "Simulator environment deemed $endian endian"
-   elif [ $1 = "checkwps" ]; then
+   elif [ "$app_type" = "sdl-app" ]; then
+     echo "Application environment deemed $endian endian"
+   elif [ "$app_type" = "checkwps" ]; then
      echo "CheckWPS environment deemed $endian endian"
    fi
 
@@ -366,11 +467,24 @@ arm1176jzscc () {
 
 mipselcc () {
  prefixtools mipsel-elf-
- GCCOPTS="$CCOPTS -march=mips32 -mtune=r4600 -mno-mips16 -mno-long-calls"
+ # mips is predefined, but we want it for paths. use __mips instead
+ GCCOPTS="$CCOPTS -march=mips32 -mtune=r4600 -mno-mips16 -mno-long-calls -Umips"
  GCCOPTS="$GCCOPTS -ffunction-sections -msoft-float -G 0 -Wno-parentheses"
  GCCOPTIMIZE="-fomit-frame-pointer"
  endian="little"
  gccchoice="4.1.2"
+}
+
+androidcc () {
+    gccchoice="4.4.0"
+    prefixtools $ANDROID_NDK_PATH/build/prebuilt/linux-x86/arm-eabi-$gccchoice/bin/arm-eabi-
+    GCCOPTS=`echo $CCOPTS | sed -e s/-ffreestanding// -e s/-nostdlib// -e s/-Wundef//`
+    GCCOPTS="$GCCOPTS -ffunction-sections -fno-short-enums -march=armv5te -mtune=xscale -msoft-float -fomit-frame-pointer"
+    GLOBAL_LDOPTS="$GLOBAL_LDOPTS -nostdlib -lc -Wl,--no-undefined -Wl,--gc-sections -Wl,-z,noexecstack -L$ANDROID_NDK_PATH/build/platforms/android-4/arch-arm/usr/lib/ -Wl,-rpath-link=$ANDROID_NKD_PATH/build/platforms/android-4/arch-arm/usr/lib"
+    LDOPTS="$LDOPTS -shared -nostdlib -lm -ldl -llog"
+    extradefines="$extradefines -DANDROID"
+    endian="little"
+    SHARED_FLAG="-shared"
 }
 
 whichadvanced () {
@@ -488,14 +602,13 @@ whichadvanced () {
         ;;
       [Ww])
         echo "Enabling Windows 32 cross-compiling"
-        crosscompile="yes"
+        win32crosscompile="yes"
+        ;;
+      "") # Match enter press when finished with advanced options
+        cont=0
         ;;
       *)
-        if [ "$interact" ]; then
-          cont=0
-        else
-          echo "[ERROR] Option $option unsupported"
-        fi
+        echo "[ERROR] Option $option unsupported"
         ;;
     esac
     if [ "$interact" ]; then
@@ -820,6 +933,7 @@ help() {
     --thumb           Build with -mthumb (for ARM builds)
     --no-thumb        The opposite of --thumb (don't use thumb even for targets
                       where this is the default
+    --prefix          Target installation directory
     --help            Shows this message (must not be used with other options)
 
 EOF
@@ -846,6 +960,9 @@ for arg in "$@"; do
 		--no-ccache)  ARG_CCACHE=0;;
 		--encopts=*)  ARG_ENCOPTS=`echo "$arg" | cut -d = -f 2`;;
 		--language=*) ARG_LANG=`echo "$arg" | cut -d = -f 2`;;
+		--lcdwidth=*) ARG_LCDWIDTH=`echo "$arg" | cut -d = -f 2`;;
+		--lcdheight=*) ARG_LCDHEIGHT=`echo "$arg" | cut -d = -f 2`;;
+		--platform=*) ARG_PLATFORM=`echo "$arg" | cut -d = -f 2`;;
 		--ram=*)      ARG_RAM=`echo "$arg" | cut -d = -f 2`;;
 		--rbdir=*)    ARG_RBDIR=`echo "$arg" | cut -d = -f 2`;;
 		--target=*)   ARG_TARGET=`echo "$arg" | cut -d = -f 2`;;
@@ -857,6 +974,7 @@ for arg in "$@"; do
 		--no-eabi)    ARG_ARM_EABI=0;;
 		--thumb)      ARG_ARM_THUMB=1;;
 		--no-thumb)   ARG_ARM_THUMB=0;;
+                --prefix=*)   PREFIX=`echo "$arg" | cut -d = -f 2`;;
 		--help)       help;;
 		*)            err=1; echo "[ERROR] Option '$arg' unsupported";;
 	esac
@@ -967,8 +1085,9 @@ cat <<EOF
  142) YH-925              ==Packard Bell==       130) Lyre proto 1
  143) YP-S3               160) Vibe 500          131) Mini2440
 
- ==MPIO==
- 170) HD200
+ ==MPIO==                                        == Application ==
+ 170) HD200                                      200) Application
+
 EOF
 
   buildfor=`input`;
@@ -1376,6 +1495,7 @@ fi
     target_id=15
     modelname="ipodvideo"
     target="-DIPOD_VIDEO"
+    memory=64 # always. This is reduced at runtime if needed
     arm7tdmicc
     tool="$rootdir/tools/scramble -add=ipvd"
     bmp2rb_mono="$rootdir/tools/bmp2rb -f 0"
@@ -2237,7 +2357,7 @@ fi
     target_id=65
     modelname="gogearhdd6330"
     target="-DPHILIPS_HDD6330"
-    memory=32 # supposedly
+    memory=64 # always
     arm7tdmicc
     tool="$rootdir/tools/scramble -mi4v3 -model=6330 -type=RBOS"
     bmp2rb_mono="$rootdir/tools/bmp2rb -f 0"
@@ -2573,7 +2693,7 @@ fi
     t_model="vibe500"
     ;;
 
-   170|hd200)
+   170|mpiohd200)
     target_id=69
     modelname="mpiohd200"
     target="-DMPIO_HD200"
@@ -2594,6 +2714,31 @@ fi
     t_cpu="coldfire"
     t_manufacturer="mpio"
     t_model="hd200"
+    ;;
+
+   200|app*)
+    target_id=100
+    modelname="application"
+    target="-DAPPLICATION"
+
+    need_full_path="yes"
+    app_get_platform
+
+    memory=8
+    uname=`uname`
+
+    appcc "$app_platform"
+    tool="cp "
+    boottool="cp "
+    bmp2rb_mono="$rootdir/tools/bmp2rb -f 0"
+    bmp2rb_native="$rootdir/tools/bmp2rb -f 4"
+    appextra="recorder:gui:radio"
+    plugins=""
+    swcodec="yes"
+    # architecture, manufacturer and model for the target-tree build
+    t_cpu="hosted"
+    t_manufacturer="$app_platform"
+    t_model="app"
     ;;
 
    *)
@@ -2682,7 +2827,7 @@ fi
     [Ii])
       appsdir='\$(ROOTDIR)/bootloader'
       apps="bootloader"
-      extradefines="-DBOOTLOADER -DE200R_INSTALLER -ffunction-sections -fdata-sections"
+      extradefines="$extradefines -DBOOTLOADER -DE200R_INSTALLER -ffunction-sections -fdata-sections"
       bootloader="1"
       echo "e200R-installer build selected"
       ;;
@@ -2693,11 +2838,11 @@ fi
       variant=`input`
       case $variant in
         4)
-           extradefines="-DBOOTLOADER -DC200_ERASE -DC240_ERASE -ffunction-sections -fdata-sections"
+           extradefines="$extradefines -DBOOTLOADER -DC200_ERASE -DC240_ERASE -ffunction-sections -fdata-sections"
            echo "c240 eraser build selected"
         ;;
         5)
-           extradefines="-DBOOTLOADER -DC200_ERASE -DC250_ERASE -ffunction-sections -fdata-sections"
+           extradefines="$extradefines -DBOOTLOADER -DC200_ERASE -DC250_ERASE -ffunction-sections -fdata-sections"
            echo "c240 eraser build selected"
         ;;
       esac
@@ -2721,7 +2866,7 @@ fi
               output=$bootoutput
           fi
       fi
-      extradefines="-DBOOTLOADER -ffunction-sections -fdata-sections"
+      extradefines="$extradefines -DBOOTLOADER -ffunction-sections -fdata-sections"
       bootloader="1"
       echo "Bootloader build selected"
       ;;
@@ -2732,7 +2877,7 @@ fi
       fi
       debug="-DDEBUG"
       simulator="yes"
-      extradefines="-DSIMULATOR"
+      extradefines="$extradefines -DSIMULATOR"
       archosrom=""
       flash=""
       echo "Simulator build selected"
@@ -2742,7 +2887,7 @@ fi
       whichadvanced $btype
       ;;
     [Gg])
-      extradefines="-DSTUB" # for target makefile symbol EXTRA_DEFINES
+      extradefines="$extradefines -DSTUB" # for target makefile symbol EXTRA_DEFINES
       appsdir='\$(ROOTDIR)/gdb'
       apps="stub"
       case $modelname in
@@ -2765,7 +2910,7 @@ fi
       toolset='';
       t_cpu='';
       GCCOPTS='';
-      extradefines="-DDEBUG"
+      extradefines="$extradefines  -DDEBUG"
       appsdir='\$(ROOTDIR)/tools/checkwps';
       output='checkwps.'${modelname};
       archosrom='';
@@ -2831,7 +2976,7 @@ uname=`uname`
 
 if [ "yes" = "$simulator" ]; then
   # setup compiler and things for simulator
-  simcc "sdl"
+  simcc "sdl-sim"
 
   if [ -d "simdisk" ]; then
     echo "Subdirectory 'simdisk' already present"
@@ -2958,13 +3103,13 @@ DLLTOOL=`findtool ${DLLTOOL} --lit`
 DLLWRAP=`findtool ${DLLWRAP} --lit`
 RANLIB=`findtool ${RANLIB} --lit`
 
+if test -n "$ccache"; then
+  CC="$ccache $CC"
+fi
+
 if test "$ARG_ARM_THUMB" = "1"; then
   extradefines="$extradefines -DUSE_THUMB"
   CC="$toolsdir/thumb-cc.py $CC"
-fi
-
-if test -n "$ccache"; then
-  CC="$ccache $CC"
 fi
 
 if test "X$endian" = "Xbig"; then
@@ -2974,20 +3119,32 @@ else
 fi
 
 if [ "$ARG_RBDIR" ]; then
-  rbdir=$ARG_RBDIR
+  if [ "$need_full_path" = "yes" ]; then
+    rbdir=`realpath $ARG_RBDIR`
+  else # prepend '/' if needed
+    if [ -z `echo $ARG_RBDIR | grep '^/'` ]; then
+        rbdir="/"$ARG_RBDIR
+    else
+        rbdir=$ARG_RBDIR
+    fi
+  fi
   echo "Using alternate rockbox dir: ${rbdir}"
 fi
 
 sed > autoconf.h \
- -e "s,@ENDIAN@,${defendian},g" \
- -e "s,^#undef ROCKBOX_HAS_LOGF,$use_logf,g" \
- -e "s,^#undef DO_BOOTCHART,$use_bootchart,g" \
- -e "s,@config_rtc@,$config_rtc,g" \
- -e "s,@have_rtc_alarm@,$have_rtc_alarm,g" \
- -e "s,@RBDIR@,${rbdir},g" \
- -e "s,@have_backlight@,$have_backlight,g" \
- -e "s,@have_fmradio_in@,$have_fmradio_in,g" \
- -e "s,@have_ata_poweroff@,$have_ata_poweroff,g" \
+ -e "s<@ENDIAN@<${defendian}<g" \
+ -e "s<^#undef ROCKBOX_HAS_LOGF<$use_logf<g" \
+ -e "s<^#undef DO_BOOTCHART<$use_bootchart<g" \
+ -e "s<@config_rtc@<$config_rtc<g" \
+ -e "s<@have_rtc_alarm@<$have_rtc_alarm<g" \
+ -e "s<@RBDIR@<${rbdir}<g" \
+ -e "s<@binpath@<${bindir_full}<g" \
+ -e "s<@libpath@<${libdir_full}<g" \
+ -e "s<@have_backlight@<$have_backlight<g" \
+ -e "s<@have_fmradio_in@<$have_fmradio_in<g" \
+ -e "s<@have_ata_poweroff@<$have_ata_poweroff<g" \
+ -e "s<@lcd_width@<$app_lcd_width<g" \
+ -e "s<@lcd_height@<$app_lcd_height<g" \
 <<EOF
 /* This header was made by configure */
 #ifndef __BUILD_AUTOCONF_H
@@ -3015,8 +3172,14 @@ sed > autoconf.h \
 @config_rtc@
 @have_rtc_alarm@
 
+/* lcd dimensions for application builds from configure */
+@lcd_width@
+@lcd_height@
+
 /* root of Rockbox */
-#define ROCKBOX_DIR "/@RBDIR@"
+#define ROCKBOX_DIR "@RBDIR@"
+#define ROCKBOX_BINARY_PATH "@binpath@"
+#define ROCKBOX_LIBRARY_PATH "@libpath@"
 
 #endif /* __BUILD_AUTOCONF_H */
 EOF
@@ -3027,6 +3190,10 @@ if test -n "$t_cpu"; then
     TARGET_INC="$TARGET_INC -I\$(FIRMDIR)/target/hosted/sdl/"
     TARGET_INC="$TARGET_INC -I\$(FIRMDIR)/target/hosted/"
   fi
+  if [ -n "$app_platform" -a "$app_platform" = "android" ]; then
+    # android's gcc doesn't add this :/
+    TARGET_INC="$TARGET_INC -I$ANDROID_NDK_PATH/build/platforms/android-4/arch-arm/usr/include"
+  fi
   TARGET_INC="$TARGET_INC -I\$(FIRMDIR)/target/$t_cpu/$t_manufacturer"
   TARGET_INC="$TARGET_INC -I\$(FIRMDIR)/target/$t_cpu"
   GCCOPTS="$GCCOPTS"
@@ -3034,8 +3201,8 @@ fi
 
 if test "$simulator" = "yes"; then
   # add simul make stuff on the #SIMUL# line
-  simmagic1="s,@SIMUL1@,\$(SILENT)\$(MAKE) -C \$(SIMDIR) OBJDIR=\$(BUILDDIR)/sim,"
-  simmagic2="s,@SIMUL2@,\$(SILENT)\$(MAKE) -C \$(ROOTDIR)/uisimulator/common OBJDIR=\$(BUILDDIR)/comsim,"
+  simmagic1="s<@SIMUL1@<\$(SILENT)\$(MAKE) -C \$(SIMDIR) OBJDIR=\$(BUILDDIR)/sim<"
+  simmagic2="s<@SIMUL2@<\$(SILENT)\$(MAKE) -C \$(ROOTDIR)/uisimulator/common OBJDIR=\$(BUILDDIR)/comsim<"
 else
   # delete the lines that match
   simmagic1='/@SIMUL1@/D'
@@ -3062,75 +3229,86 @@ fi
 if [ "$ARG_ARM_EABI" = "1" ]; then
   cmdline="$cmdline--eabi "
 fi
+if [ "$app_platform" = "sdl" ]; then
+  cmdline="$cmdline--platform=S "
+elif [ "$app_platform" = "android" ]; then
+  cmdline="$cmdline--platform=A "
+fi
+if [ "$modelname" = "application" ]; then
+  cmdline="$cmdline--lcdwidth=$ARG_LCDWIDTH --lcdheight=$ARG_LCDHEIGHT "
+fi
 
-cmdline="$cmdline--target=\$(MODELNAME) --ram=\$(MEMORYSIZE) --rbdir=\$(RBDIR) --type=$btype$advopts"
+cmdline="$cmdline--target=\$(MODELNAME) --ram=\$(MEMORYSIZE) --rbdir=\$(RBDIR) --type=$btype$advopts --prefix=\$(PREFIX)"
 ### end of cmdline
 
 sed > Makefile \
- -e "s,@ROOTDIR@,${rootdir},g" \
- -e "s,@DEBUG@,${debug},g" \
- -e "s,@MEMORY@,${memory},g" \
- -e "s,@TARGET_ID@,${target_id},g" \
- -e "s,@TARGET@,${target},g" \
- -e "s,@CPU@,${t_cpu},g" \
- -e "s,@MANUFACTURER@,${t_manufacturer},g" \
- -e "s,@MODELNAME@,${modelname},g" \
- -e "s,@LANGUAGE@,${language},g" \
+ -e "s<@ROOTDIR@<${rootdir}<g" \
+ -e "s<@DEBUG@<${debug}<g" \
+ -e "s<@MEMORY@<${memory}<g" \
+ -e "s<@TARGET_ID@<${target_id}<g" \
+ -e "s<@TARGET@<${target}<g" \
+ -e "s<@CPU@<${t_cpu}<g" \
+ -e "s<@MANUFACTURER@<${t_manufacturer}<g" \
+ -e "s<@MODELNAME@<${modelname}<g" \
+ -e "s<@LANGUAGE@<${language}<g" \
  -e "s:@VOICELANGUAGE@:${voicelanguage}:g" \
- -e "s,@PWD@,${pwd},g" \
- -e "s,@HOSTCC@,${HOSTCC},g" \
- -e "s,@HOSTAR@,${HOSTAR},g" \
- -e "s,@CC@,${CC},g" \
- -e "s,@LD@,${LD},g" \
- -e "s,@AR@,${AR},g" \
- -e "s,@AS@,${AS},g" \
- -e "s,@OC@,${OC},g" \
- -e "s,@WINDRES@,${WINDRES},g" \
- -e "s,@DLLTOOL@,${DLLTOOL},g" \
- -e "s,@DLLWRAP@,${DLLWRAP},g" \
- -e "s,@RANLIB@,${RANLIB},g" \
- -e "s,@TOOL@,${tool},g" \
- -e "s,@BMP2RB_NATIVE@,${bmp2rb_native},g" \
- -e "s,@BMP2RB_MONO@,${bmp2rb_mono},g" \
- -e "s,@BMP2RB_REMOTENATIVE@,${bmp2rb_remotenative},g" \
- -e "s,@BMP2RB_REMOTEMONO@,${bmp2rb_remotemono},g" \
- -e "s,@OUTPUT@,${output},g" \
- -e "s,@APPEXTRA@,${appextra},g" \
- -e "s,@ARCHOSROM@,${archosrom},g" \
- -e "s,@FLASHFILE@,${flash},g" \
- -e "s,@PLUGINS@,${plugins},g" \
- -e "s,@CODECS@,${swcodec},g" \
- -e "s,@PROFILE_OPTS@,${PROFILE_OPTS},g" \
- -e "s,@SHARED_FLAG@,${SHARED_FLAG},g" \
- -e "s,@GCCOPTS@,${GCCOPTS},g" \
- -e "s,@TARGET_INC@,${TARGET_INC},g" \
- -e "s!@LDOPTS@!${LDOPTS}!g" \
- -e "s,@LOADADDRESS@,${loadaddress},g" \
- -e "s,@EXTRADEF@,${extradefines},g" \
- -e "s,@APPSDIR@,${appsdir},g" \
- -e "s,@FIRMDIR@,${firmdir},g" \
- -e "s,@TOOLSDIR@,${toolsdir},g" \
- -e "s,@APPS@,${apps},g" \
- -e "s,@SIMVER@,${simver},g" \
- -e "s,@GCCVER@,${gccver},g" \
- -e "s,@GCCNUM@,${gccnum},g" \
- -e "s,@UNAME@,${uname},g" \
- -e "s,@ENDIAN@,${defendian},g" \
- -e "s,@TOOLSET@,${toolset},g" \
+ -e "s<@PWD@<${pwd}<g" \
+ -e "s<@HOSTCC@<${HOSTCC}<g" \
+ -e "s<@HOSTAR@<${HOSTAR}<g" \
+ -e "s<@CC@<${CC}<g" \
+ -e "s<@LD@<${LD}<g" \
+ -e "s<@AR@<${AR}<g" \
+ -e "s<@AS@<${AS}<g" \
+ -e "s<@OC@<${OC}<g" \
+ -e "s<@WINDRES@<${WINDRES}<g" \
+ -e "s<@DLLTOOL@<${DLLTOOL}<g" \
+ -e "s<@DLLWRAP@<${DLLWRAP}<g" \
+ -e "s<@RANLIB@<${RANLIB}<g" \
+ -e "s<@TOOL@<${tool}<g" \
+ -e "s<@BMP2RB_NATIVE@<${bmp2rb_native}<g" \
+ -e "s<@BMP2RB_MONO@<${bmp2rb_mono}<g" \
+ -e "s<@BMP2RB_REMOTENATIVE@<${bmp2rb_remotenative}<g" \
+ -e "s<@BMP2RB_REMOTEMONO@<${bmp2rb_remotemono}<g" \
+ -e "s<@OUTPUT@<${output}<g" \
+ -e "s<@APPEXTRA@<${appextra}<g" \
+ -e "s<@ARCHOSROM@<${archosrom}<g" \
+ -e "s<@FLASHFILE@<${flash}<g" \
+ -e "s<@PLUGINS@<${plugins}<g" \
+ -e "s<@CODECS@<${swcodec}<g" \
+ -e "s<@PROFILE_OPTS@<${PROFILE_OPTS}<g" \
+ -e "s<@SHARED_FLAG@<${SHARED_FLAG}<g" \
+ -e "s<@GCCOPTS@<${GCCOPTS}<g" \
+ -e "s<@TARGET_INC@<${TARGET_INC}<g" \
+ -e "s<@LDOPTS@<${LDOPTS}<g" \
+ -e "s<@GLOBAL_LDOPTS@<${GLOBAL_LDOPTS}<g" \
+ -e "s<@LOADADDRESS@<${loadaddress}<g" \
+ -e "s<@EXTRADEF@<${extradefines}<g" \
+ -e "s<@APPSDIR@<${appsdir}<g" \
+ -e "s<@FIRMDIR@<${firmdir}<g" \
+ -e "s<@TOOLSDIR@<${toolsdir}<g" \
+ -e "s<@APPS@<${apps}<g" \
+ -e "s<@APP_TYPE@<${app_type}<g" \
+ -e "s<@GCCVER@<${gccver}<g" \
+ -e "s<@GCCNUM@<${gccnum}<g" \
+ -e "s<@UNAME@<${uname}<g" \
+ -e "s<@ENDIAN@<${defendian}<g" \
+ -e "s<@TOOLSET@<${toolset}<g" \
  -e "${simmagic1}" \
  -e "${simmagic2}" \
- -e "s,@MANUALDEV@,${manualdev},g" \
- -e "s,@ENCODER@,${ENC_CMD},g" \
- -e "s,@ENC_OPTS@,${ENC_OPTS},g" \
- -e "s,@TTS_ENGINE@,${TTS_ENGINE},g" \
- -e "s,@TTS_OPTS@,${TTS_OPTS},g" \
- -e "s,@VOICETOOLSET@,${voicetoolset},g" \
- -e "s,@LANGS@,${buildlangs},g" \
- -e "s,@USE_ELF@,${USE_ELF},g" \
- -e "s,@RBDIR@,${rbdir},g" \
- -e "s,@PREFIX@,$PREFIX,g" \
- -e "s,@CMDLINE@,$cmdline,g" \
- -e "s,@SDLCONFIG@,$sdl,g" \
+ -e "s<@MANUALDEV@<${manualdev}<g" \
+ -e "s<@ENCODER@<${ENC_CMD}<g" \
+ -e "s<@ENC_OPTS@<${ENC_OPTS}<g" \
+ -e "s<@TTS_ENGINE@<${TTS_ENGINE}<g" \
+ -e "s<@TTS_OPTS@<${TTS_OPTS}<g" \
+ -e "s<@VOICETOOLSET@<${voicetoolset}<g" \
+ -e "s<@LANGS@<${buildlangs}<g" \
+ -e "s<@USE_ELF@<${USE_ELF}<g" \
+ -e "s<@RBDIR@<${rbdir}<g" \
+ -e "s<@binpath@<${bindir}<g" \
+ -e "s<@libpath@<${libdir}<g" \
+ -e "s<@PREFIX@<$PREFIX<g" \
+ -e "s<@CMDLINE@<$cmdline<g" \
+ -e "s<@SDLCONFIG@<$sdl<g" \
 <<EOF
 ## Automatically generated. http://www.rockbox.org/
 
@@ -3177,13 +3355,14 @@ export DLLWRAP=@DLLWRAP@
 export RANLIB=@RANLIB@
 export PREFIX=@PREFIX@
 export PROFILE_OPTS=@PROFILE_OPTS@
-export SIMVER=@SIMVER@
+export APP_TYPE=@APP_TYPE@
 export SIMDIR=\$(ROOTDIR)/uisimulator/sdl
 export GCCOPTS=@GCCOPTS@
 export TARGET_INC=@TARGET_INC@
 export LOADADDRESS=@LOADADDRESS@
 export SHARED_FLAG=@SHARED_FLAG@
 export LDOPTS=@LDOPTS@
+export GLOBAL_LDOPTS=@GLOBAL_LDOPTS@
 export GCCVER=@GCCVER@
 export GCCNUM=@GCCNUM@
 export UNAME=@UNAME@
@@ -3194,6 +3373,8 @@ export ENC_OPTS=@ENC_OPTS@
 export ENCODER=@ENCODER@
 export USE_ELF=@USE_ELF@
 export RBDIR=@RBDIR@
+export ROCKBOX_BINARY_PATH=@binpath@
+export ROCKBOX_LIBRARY_PATH=@libpath@
 export SDLCONFIG=@SDLCONFIG@
 
 CONFIGURE_OPTIONS=@CMDLINE@

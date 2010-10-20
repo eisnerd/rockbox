@@ -31,6 +31,7 @@
 #include "fmradio_i2c.h"
 #include "button-target.h"
 #include "backlight-target.h"
+#include "lcd.h"
 
 #define default_interrupt(name) \
   extern __attribute__((weak,alias("UIRQ"))) void name (void)
@@ -173,9 +174,7 @@ void fiq_handler(void)
 }
 
 #if defined(SANSA_C200V2)
-#include "dbop-as3525.h"
-
-int c200v2_variant = 0;
+int c200v2_variant;
 
 static void check_model_variant(void)
 {
@@ -188,24 +187,22 @@ static void check_model_variant(void)
      * to charge the input capacitance */
     for (i=0; i<1000; i++) asm volatile ("nop\n");
     /* read the pullup/pulldown value on A7 to determine the variant */
-    if (GPIOA_PIN(7) == 0) {
-        /*
-         * Backlight on A7.
-         */
-        c200v2_variant = 1;
-    } else {
-        /*
-         * Backlight on A5.
-         */
-        c200v2_variant = 0;
-    }
+    c200v2_variant = !GPIOA_PIN(7);
     GPIOA_DIR = saved_dir;
+}
+#elif defined(SANSA_FUZEV2) || defined(SANSA_CLIPPLUS)
+int amsv2_variant;
+
+static void check_model_variant(void)
+{
+    GPIOB_DIR &= ~(1<<5);
+    amsv2_variant = !!GPIOB_PIN(5);
 }
 #else
 static inline void check_model_variant(void)
 {
 }
-#endif /* SANSA_C200V2*/
+#endif /* model selection */
 
 void system_init(void)
 {
@@ -265,16 +262,7 @@ void system_init(void)
 #endif
                   AS3525_PCLK_SEL);
 
-#if CONFIG_CPU == AS3525
-    cpu_frequency = CPUFREQ_DEFAULT;    /* fastbus */
-#else
-    cpu_frequency = CPUFREQ_MAX;
-#endif
-
-#if !defined(BOOTLOADER) && defined(SANSA_FUZE) || defined(SANSA_CLIP) || defined(SANSA_E200V2)
-    /* XXX: remove me when we have a new bootloader */
-    MPMC_DYNAMIC_CONTROL = 0x0; /* MPMCCLKOUT stops when all SDRAMs are idle */
-#endif  /* BOOTLOADER */
+    set_cpu_frequency(CPUFREQ_DEFAULT);
 
 #if 0 /* the GPIO clock is already enabled by the dualboot function */
     CGU_PERI |= CGU_GPIO_CLOCK_ENABLE;
@@ -309,6 +297,9 @@ void system_init(void)
 void system_reboot(void)
 {
     _backlight_off();
+
+    disable_irq();
+
     /* use watchdog to reset */
     CGU_PERI |= (CGU_WDOCNT_CLOCK_ENABLE | CGU_WDOIF_CLOCK_ENABLE);
     WDT_LOAD = 1; /* set counter to 1 */
@@ -320,6 +311,8 @@ void system_exception_wait(void)
 {
     /* make sure lcd+backlight are on */
     _backlight_panic_on();
+    /* make sure screen content is up to date */
+    lcd_update();
     /* wait until button release (if a button is pressed) */
     while(button_read_device());
     /* then wait until next button press */
@@ -370,16 +363,14 @@ void set_cpu_frequency(long frequency)
         while(adc_read(ADC_CVDD) < 470); /* 470 * .0025 = 1.175V */
 #endif  /*  HAVE_ADJUSTABLE_CPU_VOLTAGE */
 
+        CGU_PROC = ((AS3525_FCLK_POSTDIV << 4) |
+                    (AS3525_FCLK_PREDIV  << 2) |
+                     AS3525_FCLK_SEL);
+
         asm volatile(
             "mrc p15, 0, r0, c1, c0  \n"
-
-#ifdef ASYNCHRONOUS_BUS
-            "orr r0, r0, #3<<30      \n"   /* asynchronous bus clocking */
-#else
             "bic r0, r0, #3<<30      \n"   /* clear bus bits */
             "orr r0, r0, #1<<30      \n"   /* synchronous bus clocking */
-#endif
-
             "mcr p15, 0, r0, c1, c0  \n"
             : : : "r0" );
 
@@ -393,6 +384,8 @@ void set_cpu_frequency(long frequency)
             "mcr p15, 0, r0, c1, c0  \n"
             : : : "r0" );
 
+        /* FCLK is unused so put it to the lowest freq we can */
+        CGU_PROC = ((0xf << 4) | (0x3 << 2) | AS3525_CLK_MAIN);
 
 #ifdef HAVE_ADJUSTABLE_CPU_VOLTAGE
         /* Decreasing frequency so reduce voltage after change */

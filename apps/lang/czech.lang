@@ -395,11 +395,11 @@
   </source>
   <dest>
     *: none
-    recording: "Záznam"
+    recording: "Nahrávání"
   </dest>
   <voice>
     *: none
-    recording: "Záznam, neozvučené"
+    recording: "Nahrávání, neozvučené"
   </voice>
 </phrase>
 <phrase>
@@ -926,11 +926,11 @@
   </source>
   <dest>
     *: none
-    swcodec: "Zapnout EQ"
+    swcodec: "Zapnutí EQ"
   </dest>
   <voice>
     *: none
-    swcodec: "Zapnout ekvalizér"
+    swcodec: "Zapnutí ekvalizéru"
   </voice>
 </phrase>
 <phrase>
@@ -947,7 +947,7 @@
   </dest>
   <voice>
     *: none
-    swcodec: "Grafický ekvalizér, neozvučené"
+    swcodec: "Grafický ekvalizér, neozvučitelné"
   </voice>
 </phrase>
 <phrase>
@@ -1266,11 +1266,11 @@
   </source>
   <dest>
     *: none
-    masf: "Zapnout MDB"
+    masf: "Zapnutí MDB"
   </dest>
   <voice>
     *: none
-    masf: "Zapnout emdébé"
+    masf: "Zapnutí emdébé"
   </voice>
 </phrase>
 <phrase>
@@ -1567,11 +1567,11 @@
   </source>
   <dest>
     *: none
-    crossfade: "Prolínání skladeb"
+    crossfade: "Zapnutí prolínání"
   </dest>
   <voice>
     *: none
-    crossfade: "Prolínání skladeb"
+    crossfade: "Zapnutí prolínání"
   </voice>
 </phrase>
 <phrase>
@@ -1584,11 +1584,11 @@
   </source>
   <dest>
     *: none
-    crossfade: "Pouze ruční posun po stopách"
+    crossfade: "Pouze ruční posun po skladbách"
   </dest>
   <voice>
     *: none
-    crossfade: "Pouze ruční posun po stopách"
+    crossfade: "Pouze ruční posun po skladbách"
   </voice>
 </phrase>
 <phrase>
@@ -1821,11 +1821,11 @@
   </source>
   <dest>
     *: none
-    swcodec: "Pípnutí při posunu po stopách"
+    swcodec: "Pípnutí při posunu po skladbách"
   </dest>
   <voice>
     *: none
-    swcodec: "Pípnutí při posunu po stopách"
+    swcodec: "Pípnutí při posunu po skladbách"
   </voice>
 </phrase>
 <phrase>
@@ -2042,10 +2042,10 @@
     *: "Sort Case Sensitive"
   </source>
   <dest>
-    *: "Řadit i podle velikosti písma"
+    *: "Řadit podle malých i velkých písmen"
   </dest>
   <voice>
-    *: "Řadit i podle velikosti písma"
+    *: "Řadit podle malých i velkých písmen"
   </voice>
 </phrase>
 <phrase>
@@ -2251,7 +2251,7 @@
     gogearsa9200: "Vytvářím databázi.. %d nalezeno (REW pro návrat)"
 </dest>
   <voice>
-    *: "záznamy nalezené v databázi"
+    *: "záznamů vytvořeno do databáze"
   </voice>
 </phrase>
 <phrase>
@@ -2293,10 +2293,10 @@
     *: "Initialize Now"
   </source>
   <dest>
-    *: "Inicializovat jí nyní"
+    *: "Inicializovat teď"
   </dest>
   <voice>
-    *: "Inycializovat jí nyní"
+    *: "Inycializovat teď"
   </voice>
 </phrase>
 <phrase>
@@ -2511,11 +2511,11 @@
   </source>
   <dest>
     *: none
-    charging: "Podsvítit při nabíjení"
+    charging: "Podsvícení při nabíjení"
   </dest>
   <voice>
     *: none
-    charging: "Podsvítit při nabíjení"
+    charging: "Podsvícení při nabíjení"
   </voice>
 </phrase>
 <phrase>
@@ -2528,11 +2528,11 @@
   </source>
   <dest>
     *: none
-    hold_button: "Podsvítit při zamčených klávesách"
+    hold_button: "Podsvícení při zamčených klávesách"
   </dest>
   <voice>
     *: none
-    hold_button: "Podsvítit při zamčených klávesách"
+    hold_button: "Podsvícení při zamčených klávesách"
   </voice>
 </phrase>
 <phrase>
@@ -3470,10 +3470,10 @@
     *: "Greek (ISO-8859-7)"
   </source>
   <dest>
-    *: "Řecká (ISO-8859-7)"
+    *: "Řecké (ISO-8859-7)"
   </dest>
   <voice>
-    *: "Řecká"
+    *: "Řecké"
   </voice>
 </phrase>
 <phrase>
@@ -3486,11 +3486,11 @@
   </source>
   <dest>
     *: none
-    lcd_bitmap: "Hebrejská (ISO-8859-8)"
+    lcd_bitmap: "Hebrejské (ISO-8859-8)"
   </dest>
   <voice>
     *: none
-    lcd_bitmap: "Hebrejská"
+    lcd_bitmap: "Hebrejské"
   </voice>
 </phrase>
 <phrase>
@@ -3517,11 +3517,11 @@
   </source>
   <dest>
     *: none
-    lcd_bitmap: "Thajská (ISO-8859-11)"
+    lcd_bitmap: "Thajské (ISO-8859-11)"
   </dest>
   <voice>
     *: none
-    lcd_bitmap: "Thajská"
+    lcd_bitmap: "Thajské"
   </voice>
 </phrase>
 <phrase>
@@ -3534,11 +3534,11 @@
   </source>
   <dest>
     *: none
-    lcd_bitmap: "Arabská (CP1256)"
+    lcd_bitmap: "Arabské (CP1256)"
   </dest>
   <voice>
     *: none
-    lcd_bitmap: "Arabská"
+    lcd_bitmap: "Arabské"
   </voice>
 </phrase>
 <phrase>
@@ -3549,10 +3549,10 @@
     *: "Turkish (ISO-8859-9)"
   </source>
   <dest>
-    *: "Turecká (ISO-8859-9)"
+    *: "Turecké (ISO-8859-9)"
   </dest>
   <voice>
-    *: "Turecká"
+    *: "Turecké"
   </voice>
 </phrase>
 <phrase>
@@ -3579,11 +3579,11 @@
   </source>
   <dest>
     *: none
-    lcd_bitmap: "Japonská (SJIS)"
+    lcd_bitmap: "Japonské (SJIS)"
   </dest>
   <voice>
     *: none
-    lcd_bitmap: "Japonská"
+    lcd_bitmap: "Japonské"
   </voice>
 </phrase>
 <phrase>
@@ -3613,11 +3613,11 @@
   </source>
   <dest>
     *: none
-    lcd_bitmap: "Korejština (KSX1001)"
+    lcd_bitmap: "Korejské (KSX1001)"
   </dest>
   <voice>
     *: none
-    lcd_bitmap: "Korejština"
+    lcd_bitmap: "Korejské"
   </voice>
 </phrase>
 <phrase>
@@ -4806,10 +4806,10 @@
     *: ".talk Clip"
   </source>
   <dest>
-    *: "Přehrávat .talk klipy"
+    *: "Talk klip, "
   </dest>
   <voice>
-    *: "Přehrávat talk klipy"
+    *: "Talk klip, "
   </voice>
 </phrase>
 <phrase>
@@ -4948,11 +4948,11 @@
   </source>
   <dest>
     *: none
-    recording: "Nastavení záznamu"
+    recording: "Nastavení nahrávání"
   </dest>
   <voice>
     *: none
-    recording: "Nastavení záznamu"
+    recording: "Nastavení nahrávání"
   </voice>
 </phrase>
 <phrase>
@@ -5937,11 +5937,11 @@
   </source>
   <dest>
     *: none
-    recording: "Nastavit adresář pro záznam"
+    recording: "Nastavit jako adresář pro nahrávání"
   </dest>
   <voice>
     *: none
-    recording: "Nastavit adresář pro záznam"
+    recording: "Nastavit jako adresář pro nahrávání"
   </voice>
 </phrase>
 <phrase>
@@ -5954,11 +5954,11 @@
   </source>
   <dest>
     *: none
-    recording: "Vymazat adresář s nahrávkami"
+    recording: "Vymazat obsah adresář s nahrávkami"
   </dest>
   <voice>
     *: none
-    recording: "Vymazat adresář s nahrávkami"
+    recording: "Vymazat obsah adresář s nahrávkami"
   </voice>
 </phrase>
 <phrase>
@@ -5971,11 +5971,11 @@
   </source>
   <dest>
     *: none
-    recording: "Nelze zapsat do adresáře pro záznam"
+    recording: "Nelze zapsat do adresáře pro nahrávání"
   </dest>
   <voice>
     *: none
-    recording: "Nelze zapsat do adresáře pro záznam"
+    recording: "Nelze zapsat do adresáře pro nahrávání"
   </voice>
 </phrase>
 <phrase>
@@ -7137,7 +7137,7 @@
     *: "Zobrazit informace o skladbě"
   </dest>
   <voice>
-    *: "Zobrazit informace o skladbě"
+    *: "Zobrazit informace o skladbě, neozvučené"
   </voice>
 </phrase>
 <phrase>
@@ -8260,10 +8260,10 @@
     *: "Please reboot to enable"
   </source>
   <dest>
-    *: "Restartujte pro zapnutí"
+    *: "Pro zapnutí restartujte"
   </dest>
   <voice>
-    *: "Restartujte pro zapnutí"
+    *: "Pro zapnutí restartujte"
   </voice>
 </phrase>
 <phrase>
@@ -8426,7 +8426,7 @@
     *: ""
   </dest>
   <voice>
-    *: "0"
+    *: "nula"
   </voice>
 </phrase>
 <phrase>
@@ -8440,7 +8440,7 @@
     *: ""
   </dest>
   <voice>
-    *: "1"
+    *: "jedna"
   </voice>
 </phrase>
 <phrase>
@@ -8454,7 +8454,7 @@
     *: ""
   </dest>
   <voice>
-    *: "2"
+    *: "dva"
   </voice>
 </phrase>
 <phrase>
@@ -8902,7 +8902,7 @@
     *: ""
   </dest>
   <voice>
-    *: "milisekunda"
+    *: "milisekund"
   </voice>
 </phrase>
 <phrase>
@@ -9504,7 +9504,7 @@
     *: ""
   </dest>
   <voice>
-    *: "soubor"
+    *: "soubor, "
   </voice>
 </phrase>
 <phrase>
@@ -9518,7 +9518,7 @@
     *: ""
   </dest>
   <voice>
-    *: "složka"
+    *: "složka, "
   </voice>
 </phrase>
 <phrase>
@@ -9532,7 +9532,7 @@
     *: ""
   </dest>
   <voice>
-    *: "audio"
+    *: "audio soubor, "
   </voice>
 </phrase>
 <phrase>
@@ -9546,7 +9546,7 @@
     *: ""
   </dest>
   <voice>
-    *: "konfigurace"
+    *: "konfigurační soubor, "
   </voice>
 </phrase>
 <phrase>
@@ -9560,7 +9560,7 @@
     *: ""
   </dest>
   <voice>
-    *: "téma"
+    *: "soubor tématu, "
   </voice>
 </phrase>
 <phrase>
@@ -9574,7 +9574,7 @@
     *: ""
   </dest>
   <voice>
-    *: "plagin"
+    *: "plagin, "
   </voice>
 </phrase>
 <phrase>
@@ -9588,7 +9588,7 @@
     *: ""
   </dest>
   <voice>
-    *: "font"
+    *: "font, "
   </voice>
 </phrase>
 <phrase>
@@ -9602,7 +9602,7 @@
     *: ""
   </dest>
   <voice>
-    *: "záložka"
+    *: "záložka, "
   </voice>
 </phrase>
 <phrase>
@@ -9616,7 +9616,7 @@
     *: ""
   </dest>
   <voice>
-    *: "firmvér"
+    *: "firmvér, "
   </voice>
 </phrase>
 <phrase>
@@ -9633,7 +9633,7 @@
   </dest>
   <voice>
     *: none
-    remote: "téma dálkového ovládání"
+    remote: "soubor tématu dálkového ovládání, "
   </voice>
 </phrase>
 <phrase>
@@ -9647,7 +9647,7 @@
     *: ""
   </dest>
   <voice>
-    *: "klávesnice"
+    *: "soubor klávesnice, "
   </voice>
 </phrase>
 <phrase>
@@ -9661,7 +9661,7 @@
      *: ""
   </dest>
   <voice>
-    *: "kjůšít"
+    *: "soubor kjůšít, "
   </voice>
 </phrase>
 <phrase>
@@ -9675,7 +9675,7 @@
     *: ""
   </dest>
   <voice>
-    *: "Index"
+    *: "Skladba"
   </voice>
 </phrase>
 <phrase>
@@ -10288,10 +10288,10 @@
     *: "Central European (CP1250)"
   </source>
   <dest>
-    *: "Středoevropský (CP1250)"
+    *: "Středoevropské (CP1250)"
   </dest>
   <voice>
-    *: "Středoevropský"
+    *: "Středoevropské, doporučeno"
   </voice>
 </phrase>
 <phrase>
@@ -10322,7 +10322,7 @@
   </dest>
   <voice>
     *: none
-    lcd_color: "Barvy, neozvučené"
+    lcd_color: "Barvy, neozvučitelné"
   </voice>
 </phrase>
 <phrase>
@@ -10801,10 +10801,10 @@
     *: "Skip Length"
   </source>
   <dest>
-    *: "Přeskočit délku"
+    *: "Přeskakování ve skladbách"
   </dest>
   <voice>
-    *: "Přeskočit délku"
+    *: "Přeskakování ve skladbách"
   </voice>
 </phrase>
 <phrase>
@@ -10815,10 +10815,10 @@
     *: "Skip Track"
   </source>
   <dest>
-    *: "Přeskočit skladbu"
+    *: "O celou skladbu"
   </dest>
   <voice>
-    *: "Přeskočit skladbu"
+    *: "O celou skladbu"
   </voice>
 </phrase>
 <phrase>
@@ -11035,7 +11035,7 @@
 </phrase>
 <phrase>
   id: LANG_RIGHT
-  desc: Generic use of 'right
+  desc: Generic use of 'right'
   user: core
   <source>
     *: "Right"
@@ -11071,11 +11071,11 @@
   </source>
   <dest>
     *: none
-    quickscreen: "Nastavit jako levý quickscreen bod"
+    quickscreen: "Nastavit jako levou volbu rychlé nabídky"
   </dest>
   <voice>
     *: none
-    quickscreen: "Nastavit jako levý quickscreen bod"
+    quickscreen: "Nastavit jako levou volbu rychlé nabídky"
   </voice>
 </phrase>
 <phrase>
@@ -11088,11 +11088,11 @@
   </source>
   <dest>
     *: none
-    quickscreen: "Nastavit jako pravý quickscreen bod"
+    quickscreen: "Nastavit jako pravou volbu rychlé nabídky"
   </dest>
   <voice>
     *: none
-    quickscreen: "Nastavit jako pravý quickscreen bod"
+    quickscreen: "Nastavit jako pravou volbu rychlé nabídky"
   </voice>
 </phrase>
 <phrase>
@@ -11105,11 +11105,11 @@
   </source>
   <dest>
     *: none
-    quickscreen: "Nastavit jako dolní quickscreen bod"
+    quickscreen: "Nastavit jako dolní volbu rychlé nabídky"
   </dest>
   <voice>
     *: none
-    quickscreen: "Nastavit jako dolní quickscreen bod"
+    quickscreen: "Nastavit jako dolní volbu rychlé nabídky"
   </voice>
 </phrase>
 <phrase>
@@ -11123,7 +11123,7 @@
     *: "Zásluhy"
   </dest>
   <voice>
-    *: "Zásluhy, neozvučené"
+    *: "Zásluhy, neozvučitelné"
   </voice>
 </phrase>
 <phrase>
@@ -11244,10 +11244,10 @@
     *: "Prevent Track Skipping"
   </source>
   <dest>
-    *: "Zabránit přeskakování skladeb"
+    *: "Zabránit přeskakování celých skladeb"
   </dest>
   <voice>
-    *: "Zabránit přeskakování skladeb"
+    *: "Zabránit přeskakování celých skladeb"
   </voice>
 </phrase>
 <phrase>
@@ -11591,11 +11591,11 @@
   </source>
   <dest>
     *: none
-    quickscreen: "Nastavit jako horníní quickscreen bod"
+    quickscreen: "Nastavit jako horní volbu rychlé nabídky"
   </dest>
   <voice>
     *: none
-    quickscreen: "Nastavit jako horníní quickscreen bod"
+    quickscreen: "Nastavit jako horní volbu rychlé nabídky"
   </voice>
 </phrase>
 <phrase>
@@ -11861,10 +11861,10 @@
     *: "Skip to Outro"
   </source>
   <dest>
-    *: "Přeskočit na závěr"
+    *: "Na závěr skladby"
   </dest>
   <voice>
-    *: "Přeskočit na závěr"
+    *: "Na závěr skladby"
   </voice>
 </phrase>
 <phrase>
@@ -11984,11 +11984,11 @@
   </source>
   <dest>
     *: none
-    crossfade: "Automatická změna pouze stopy"
+    crossfade: "Automatická změna pouze skladby"
   </dest>
   <voice>
     *: none
-    crossfade: "Automatická změna pouze stopy"
+    crossfade: "Automatická změna pouze skladby"
   </voice>
 </phrase>
 <phrase>
@@ -11999,10 +11999,10 @@
     *: "Next Track:"
   </source>
   <dest>
-    *: "Další stopa:"
+    *: "Další skladba:"
   </dest>
   <voice>
-    *: "Další stopa:"
+    *: "Další skladba:"
   </voice>
 </phrase>
 <phrase>
@@ -12477,6 +12477,99 @@
     *: "Plugin PictureFlow"
   </dest>
   <voice>
-    *: "Plagin pikčrflou, neozvučeno"
+    *: "Plagin pikčrflou, neozvučitelné"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_KBD_OK
+  desc: in keyboard
+  user: core
+  <source>
+    *: none
+    touchscreen: "OK"
+  </source>
+  <dest>
+    *: none
+    touchscreen: "OK"
+  </dest>
+  <voice>
+    *: none
+    touchscreen: "OUKEJ"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_KBD_DELETE
+  desc: in keyboard
+  user: core
+  <source>
+    *: none
+    touchscreen: "Del"
+  </source>
+  <dest>
+    *: none
+    touchscreen: "Mazat"
+  </dest>
+  <voice>
+    *: none
+    touchscreen: "Mazat"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_KBD_CANCEL
+  desc: in keyboard
+  user: core
+  <source>
+    *: none
+    touchscreen: "Cancel"
+  </source>
+  <dest>
+    *: none
+    touchscreen: "Zrušit"
+  </dest>
+  <voice>
+    *: none
+    touchscreen: "Zrušit"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_BOOKMARK_SETTINGS_AUTOUPDATE
+  desc: prompt for user to decide whether to update bookmarks
+  user: core
+  <source>
+    *: "Update on Stop"
+  </source>
+  <dest>
+    *: "Aktualizovat při zastavení"
+  </dest>
+  <voice>
+    *: "Aktualizovat při zastavení"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_SET_AS_START_DIR
+  desc: used in the onplay menu to set a starting browser dir
+  user: core
+  <source>
+    *: "Start File Browser Here"
+  </source>
+  <dest>
+    *: "Začít prohlížení souborů zde"
+  </dest>
+  <voice>
+    *: "Začít prohlížení souborů zde"
+  </voice>
+</phrase>
+<phrase>
+  id: LANG_RESET_START_DIR
+  desc: reset the browser start directory
+  user: core
+  <source>
+    *: "Start File Browser at /"
+  </source>
+  <dest>
+    *: "Začít prohlížení souborů na rootu"
+  </dest>
+  <voice>
+    *: "Začít prohlížení souborů na růtu"
   </voice>
 </phrase>

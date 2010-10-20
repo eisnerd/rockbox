@@ -30,19 +30,20 @@ const struct tv_preferences * const preferences = &prefs;
 
 static int listner_count = 0;
 
-#define TV_MAX_LISTNERS 4
-static void (*listners[TV_MAX_LISTNERS])(const struct tv_preferences *oldp);
+#define TV_MAX_LISTNERS 5
+static int (*listners[TV_MAX_LISTNERS])(const struct tv_preferences *oldp);
 
-static void tv_notify_change_preferences(const struct tv_preferences *oldp)
+static bool tv_notify_change_preferences(const struct tv_preferences *oldp)
 {
     int i;
+    int res = TV_CALLBACK_OK;
 
     /*
      * the following items do not check.
      *   - alignment
      *   - horizontal_scroll_mode
      *   - vertical_scroll_mode
-     *   - page_mode
+     *   - overlap_page_mode
      *   - font
      *   - autoscroll_speed
      *   - narrow_mode
@@ -58,16 +59,20 @@ static void tv_notify_change_preferences(const struct tv_preferences *oldp)
 #ifdef HAVE_LCD_BITMAP
         (oldp->header_mode          != preferences->header_mode)          ||
         (oldp->footer_mode          != preferences->footer_mode)          ||
+        (oldp->statusbar            != preferences->statusbar)            ||
         (rb->strcmp(oldp->font_name, preferences->font_name))             ||
 #endif
         (rb->strcmp(oldp->file_name, preferences->file_name)))
     {
-        for (i = 0; i < listner_count; i++)
-            listners[i](oldp);
+        /* callback functions are called as FILO */
+        for (i = listner_count - 1; i >= 0; i--)
+            if ((res = listners[i](oldp)) != TV_CALLBACK_OK)
+                break;
     }
+    return (res != TV_CALLBACK_ERROR);
 }
 
-void tv_set_preferences(const struct tv_preferences *new_prefs)
+bool tv_set_preferences(const struct tv_preferences *new_prefs)
 {
     static struct tv_preferences old_prefs;
     struct tv_preferences *oldp = NULL;
@@ -78,7 +83,7 @@ void tv_set_preferences(const struct tv_preferences *new_prefs)
     is_initialized = true;
 
     rb->memcpy(&prefs, new_prefs, sizeof(struct tv_preferences));
-    tv_notify_change_preferences(oldp);
+    return tv_notify_change_preferences(oldp);
 }
 
 void tv_copy_preferences(struct tv_preferences *copy_prefs)
@@ -94,17 +99,19 @@ void tv_set_default_preferences(struct tv_preferences *p)
     p->alignment = AL_LEFT;
     p->horizontal_scroll_mode = HS_SCREEN;
     p->vertical_scroll_mode = VS_PAGE;
-    p->page_mode = PM_NO_OVERLAP;
-    p->horizontal_scrollbar = SB_OFF;
-    p->vertical_scrollbar = SB_OFF;
+    p->overlap_page_mode = false;
+    p->horizontal_scrollbar = false;
+    p->vertical_scrollbar = false;
 #ifdef HAVE_LCD_BITMAP
-    p->header_mode = HD_BOTH;
-    p->footer_mode = FT_BOTH;
+    p->header_mode = true;
+    p->footer_mode = true;
+    p->statusbar   = true;
     rb->strlcpy(p->font_name, rb->global_settings->font_file, MAX_PATH);
     p->font = rb->font_get(FONT_UI);
 #else
-    p->header_mode = HD_NONE;
-    p->footer_mode = FT_NONE;
+    p->header_mode = false;
+    p->footer_mode = false;
+    p->statusbar   = false;
 #endif
     p->autoscroll_speed = 1;
     p->narrow_mode = NM_PAGE;
@@ -114,7 +121,7 @@ void tv_set_default_preferences(struct tv_preferences *p)
     p->file_name[0] = '\0';
 }
 
-void tv_add_preferences_change_listner(void (*listner)(const struct tv_preferences *oldp))
+void tv_add_preferences_change_listner(int (*listner)(const struct tv_preferences *oldp))
 {
     if (listner_count < TV_MAX_LISTNERS)
         listners[listner_count++] = listner;

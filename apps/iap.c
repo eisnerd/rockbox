@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <memory.h>
 #include <string.h>
 
 #include "iap.h"
@@ -53,7 +52,7 @@ static unsigned long iap_remotebtn = 0;
 static int iap_repeatbtn = 0;
 static bool iap_btnrepeat = false, iap_btnshuffle = false;
 
-unsigned char serbuf[RX_BUFLEN];
+static unsigned char serbuf[RX_BUFLEN];
 static int serbuf_i = 0;
 
 static unsigned char response[TX_BUFLEN];
@@ -838,13 +837,13 @@ void iap_handlepkt(void)
             /* tuner frequency from scan */
             case 0x13:
             {
-                rmt_tuner_freq();
+                rmt_tuner_freq(serbuf);
                 break;
             }
             /* RDS station name 0x21 1E 00 + ASCII text*/
             case 0x21:
             {
-                rmt_tuner_rds_data();
+                rmt_tuner_rds_data(serbuf);
                 break;
             }
         }
@@ -869,3 +868,9 @@ int remote_control_rx(void)
 
     return btn;
 }
+
+const unsigned char *iap_get_serbuf(void)
+{
+    return serbuf;
+}
+

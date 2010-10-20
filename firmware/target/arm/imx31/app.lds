@@ -9,18 +9,12 @@ STARTUP(target/arm/imx31/crt0.o)
 #define PLUGINSIZE PLUGIN_BUFFER_SIZE
 #define CODECSIZE CODEC_SIZE
 
-#ifdef DEBUG
-#define STUBOFFSET 0x10000
-#else
-#define STUBOFFSET 0
-#endif
-
 #include "imx31l.h"
 /* Subtract 1MB for the FRAME/TTB section */
-#define DRAMSIZE ((MEMORYSIZE * 0x100000) - STUBOFFSET - CODECSIZE - \
+#define DRAMSIZE ((MEMORYSIZE * 0x100000) - CODECSIZE - \
                   PLUGINSIZE - QHARRAY_SIZE - FRAME_SIZE - TTB_SIZE)
 
-#define DRAMORIG (0x0 + STUBOFFSET)
+#define DRAMORIG 0x0
 /* #define IRAMORIG 0x1FFFC000 */
 #define IRAMORIG DRAMORIG
 #define IRAM     DRAM
@@ -99,6 +93,10 @@ SECTIONS
         *(.eh_frame)
     }
 
+    /* NOLOAD sections at end start here. Any part of the binary image past
+     * this point is discarded or copied elsewhere. */
+    _noloaddram = .;
+
     .vectors 0x0 :
     {
         _vectorsstart = .;
@@ -119,7 +117,7 @@ SECTIONS
 
     _initcopy = LOADADDR(.init);
 
-    .stack (NOLOAD) :
+    .stack _noloaddram (NOLOAD) :
     {
         . = ALIGN(4);
         *(.stack)

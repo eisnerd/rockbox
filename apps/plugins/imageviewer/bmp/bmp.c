@@ -65,38 +65,6 @@ struct bitmap bmp;
 
 /************************* Implementation ***************************/
 
-#ifdef USEGSLIB
-/* copied & pasted from lib/pluginlib_bmp.c. */
-static void grey_resize_bitmap(struct bitmap *src, struct bitmap *dst)
-{
-    const int srcw = src->width;
-    const int srch = src->height;
-    const int dstw = dst->width;
-    const int dsth = dst->height;
-    unsigned char *srcd = src->data;
-    unsigned char *dstd = dst->data;
-
-    const long xrstep = ((srcw-1) << 8) / (dstw-1);
-    const long yrstep = ((srch-1) << 8) / (dsth-1);
-    unsigned char *src_row, *dst_row;
-    long xr, yr = 0;
-    int src_x, src_y, dst_x, dst_y;
-    for (dst_y=0; dst_y < dsth; dst_y++)
-    {
-        src_y = (yr >> 8);
-        src_row = &srcd[src_y * srcw];
-        dst_row = &dstd[dst_y * dstw];
-        for (xr=0,dst_x=0; dst_x < dstw; dst_x++)
-        {
-            src_x = (xr >> 8);
-            dst_row[dst_x] = src_row[src_x];
-            xr += xrstep;
-        }
-        yr += yrstep;
-    }
-}
-#endif /* USEGSLIB */
-
 bool img_ext(const char *ext)
 {
     if (!ext)
@@ -209,11 +177,8 @@ int load_image(char *filename, struct image_info *info,
     if (!running_slideshow)
     {
         rb->lcd_puts(0, 0, rb->strrchr(filename,'/')+1);
-        rb->lcd_update();
-
-        rb->snprintf(print, sizeof(print), "loading %dx%d%s",
+        rb->lcd_putsf(0, 1, "loading %dx%d%s",
                         bmp.width, bmp.height, ds == 1?"":"(resize on load)");
-        rb->lcd_puts(0, 1, print);
         rb->lcd_update();
     }
 
@@ -260,8 +225,7 @@ int load_image(char *filename, struct image_info *info,
 
     if (!running_slideshow)
     {
-        rb->snprintf(print, sizeof(print), "image %dx%d", bmp.width, bmp.height);
-        rb->lcd_puts(0, 2, print);
+        rb->lcd_putsf(0, 2, "image %dx%d", bmp.width, bmp.height);
         rb->lcd_update();
     }
 
@@ -308,9 +272,7 @@ int get_image(struct image_info *info, int ds)
 
         if (!running_slideshow)
         {
-            rb->snprintf(print, sizeof(print), "resizing %d*%d",
-                            info->width, info->height);
-            rb->lcd_puts(0, 3, print);
+            rb->lcd_putsf(0, 3, "resizing %d*%d", info->width, info->height);
             rb->lcd_update();
         }
 

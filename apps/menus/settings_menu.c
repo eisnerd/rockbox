@@ -103,6 +103,15 @@ MENUITEM_SETTING(browse_current, &global_settings.browse_current, NULL);
 #ifdef HAVE_LCD_BITMAP
 MENUITEM_SETTING(show_path_in_browser, &global_settings.show_path_in_browser, NULL);
 #endif
+static int clear_start_directory(void)
+{
+    strcpy(global_settings.start_directory, "/");
+    settings_save();
+    splash(HZ, ID2P(LANG_RESET_DONE_CLEAR));
+    return false;
+}
+MENUITEM_FUNCTION(clear_start_directory_item, 0, ID2P(LANG_RESET_START_DIR), 
+                  clear_start_directory, NULL, NULL, Icon_file_view_menu);
 static int fileview_callback(int action,const struct menu_item_ex *this_item)
 {
     static int oldval;
@@ -124,8 +133,9 @@ MAKE_MENU(file_menu, ID2P(LANG_FILE), 0, Icon_file_view_menu,
                 &sort_case, &sort_dir, &sort_file, &interpret_numbers,
                 &dirfilter, &show_filename_ext, &browse_current,
 #ifdef HAVE_LCD_BITMAP
-                &show_path_in_browser
+                &show_path_in_browser,
 #endif
+                &clear_start_directory_item
                 );
 /*    FILE VIEW MENU               */
 /***********************************/
@@ -156,7 +166,7 @@ static int usbcharging_callback(int action,const struct menu_item_ex *this_item)
 MENUITEM_SETTING(usb_charging, &global_settings.usb_charging, usbcharging_callback);
 #endif /* HAVE_USB_CHARGING_ENABLE */
 MAKE_MENU(battery_menu, ID2P(LANG_BATTERY_MENU), 0, Icon_NOICON,
-#if BATTERY_CAPACITY_INC > 0
+#if defined(BATTERY_CAPACITY_INC) && BATTERY_CAPACITY_INC > 0
             &battery_capacity,
 #endif
 #if BATTERY_TYPES_COUNT > 1
@@ -347,11 +357,12 @@ static int bmark_callback(int action,const struct menu_item_ex *this_item)
 }
 MENUITEM_SETTING(autocreatebookmark,
                  &global_settings.autocreatebookmark, bmark_callback);
+MENUITEM_SETTING(autoupdatebookmark, &global_settings.autoupdatebookmark, NULL);
 MENUITEM_SETTING(autoloadbookmark, &global_settings.autoloadbookmark, NULL);
 MENUITEM_SETTING(usemrb, &global_settings.usemrb, NULL);
 MAKE_MENU(bookmark_settings_menu, ID2P(LANG_BOOKMARK_SETTINGS), 0,
           Icon_Bookmark,
-          &autocreatebookmark, &autoloadbookmark, &usemrb);
+          &autocreatebookmark, &autoupdatebookmark, &autoloadbookmark, &usemrb);
 /*    BOOKMARK MENU                */
 /***********************************/
 
@@ -412,12 +423,11 @@ MAKE_MENU(hotkey_menu, ID2P(LANG_HOTKEY), 0, Icon_NOICON,
 
 /***********************************/
 /*    SETTINGS MENU                */
-static int language_browse(void)
-{
-    return (int)rockbox_browse(LANG_DIR, SHOW_LNG);
-}
-MENUITEM_FUNCTION(browse_langs, 0, ID2P(LANG_LANGUAGE), language_browse,
-                    NULL, NULL, Icon_Language);
+
+static struct browse_folder_info langs = { LANG_DIR, SHOW_LNG };
+
+MENUITEM_FUNCTION(browse_langs, MENU_FUNC_USEPARAM, ID2P(LANG_LANGUAGE),
+                  browse_folder, (void*)&langs, NULL, Icon_Language);
 
 MAKE_MENU(settings_menu_item, ID2P(LANG_GENERAL_SETTINGS), 0,
           Icon_General_settings_menu,

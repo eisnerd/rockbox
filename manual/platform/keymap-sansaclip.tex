@@ -25,7 +25,7 @@
 \newcommand{\ActionStdUsbCharge}{\ButtonSelect}
 
 %Button actions, wps context
-\newcommand{\ActionWpsPlay}{\ButtonHome{} + \ButtonSelect}
+\newcommand{\ActionWpsPlay}{\ButtonUp}
 \newcommand{\ActionWpsSkipNext}{\ButtonRight}
 \newcommand{\ActionWpsSkipPrev}{\ButtonLeft}
 \newcommand{\ActionWpsSeekBack}{Long \ButtonLeft}
@@ -35,11 +35,11 @@
 \newcommand{\ActionWpsVolDown}{\ButtonVolDown}
 \newcommand{\ActionWpsVolUp}{\ButtonVolUp}
 
-\newcommand{\ActionWpsQuickScreen}{Long \ButtonDown}
-\newcommand{\ActionWpsMenu}{\ButtonDown}
+\newcommand{\ActionWpsQuickScreen}{Long \ButtonHome}
+\newcommand{\ActionWpsMenu}{\ButtonHome}
 \newcommand{\ActionWpsContext}{Long \ButtonSelect}
 \newcommand{\ActionWpsBrowse}{\ButtonSelect}
-\newcommand{\ActionWpsPitchScreen}{\ButtonSelect{} + \ButtonUp}
+\newcommand{\ActionWpsPitchScreen}{Long \ButtonUp}
 \newcommand{\ActionWpsPlaylist}{Long \ButtonDown}
 \newcommand{\ActionWpsIdThreeScreen}{\ButtonSelect{} + \ButtonDown}
 
@@ -48,7 +48,7 @@
 \newcommand{\ActionWpsAbReset}{\ButtonPower{} + \ButtonUp}
 
 %Button actions, tree context
-\newcommand{\ActionTreeWps}{\ButtonUp}
+\newcommand{\ActionTreeWps}{\ButtonHome{} + \ButtonSelect}
 \newcommand{\ActionTreeStop}{\ButtonPower}
 \newcommand{\ActionTreeEnter}{\ButtonSelect{} or \ButtonRight}
 \newcommand{\ActionTreeParentDirectory}{\ButtonLeft}
@@ -75,14 +75,14 @@
 
 %Button actions, Pitch Screen context
 \newcommand{\ActionPsToggleMode}{\ButtonHome}
-\newcommand{\ActionPsIncSmall}{\ButtonRight}
-\newcommand{\ActionPsIncBig}{Long \ButtonRight}
-\newcommand{\ActionPsDecSmall}{\ButtonLeft}
-\newcommand{\ActionPsDecBig}{Long \ButtonLeft}
+\newcommand{\ActionPsIncSmall}{\ButtonUp}
+\newcommand{\ActionPsIncBig}{Long \ButtonUp}
+\newcommand{\ActionPsDecSmall}{\ButtonDown}
+\newcommand{\ActionPsDecBig}{Long \ButtonDown}
 \newcommand{\ActionPsNudgeLeft}{\ButtonLeft}
 \newcommand{\ActionPsNudgeRight}{\ButtonRight}
 \newcommand{\ActionPsReset}{\ButtonSelect}
-\newcommand{\ActionPsExit}{\ButtonPower{} or \ButtonUp}
+\newcommand{\ActionPsExit}{\ButtonPower}
 
 %Button actions, Recording screen context
 \newcommand{\ActionRecPause}{\ButtonSelect}

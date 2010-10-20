@@ -64,6 +64,8 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <SystemConfiguration/SystemConfiguration.h>
 #include <CoreServices/CoreServices.h>
+#include <IOKit/IOKitLib.h>
+#include <IOKit/usb/IOUSBLib.h>
 #endif
 
 #include "utils.h"
@@ -162,10 +164,12 @@ QString System::osVersionString(void)
 {
     QString result;
 #if defined(Q_OS_WIN32)
+    SYSTEM_INFO sysinfo;
     OSVERSIONINFO osvi;
     ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
     osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
     GetVersionEx(&osvi);
+    GetSystemInfo(&sysinfo);
 
     result = QString("Windows version %1.%2, ").arg(osvi.dwMajorVersion).arg(osvi.dwMinorVersion);
     if(osvi.szCSDVersion)
@@ -173,14 +177,22 @@ QString System::osVersionString(void)
             .arg(QString::fromWCharArray(osvi.szCSDVersion));
     else
         result += QString("build %1").arg(osvi.dwBuildNumber);
+    result += QString("<br/>CPU: %1, %2 processor(s)").arg(sysinfo.dwProcessorType)
+              .arg(sysinfo.dwNumberOfProcessors);
 #endif
 #if defined(Q_OS_LINUX) || defined(Q_OS_MACX)
     struct utsname u;
     int ret;
     ret = uname(&u);
 
-    result = QString("CPU: %1<br/>System: %2<br/>Release: %3<br/>Version: %4")
-        .arg(u.machine).arg(u.sysname).arg(u.release).arg(u.version);
+#if defined(Q_OS_MACX)
+    ItemCount cores = MPProcessors();
+#else
+    long cores = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+    result = QString("CPU: %1, %2 processor(s)").arg(u.machine).arg(cores);
+    result += QString("<br/>System: %2<br/>Release: %3<br/>Version: %4")
+        .arg(u.sysname).arg(u.release).arg(u.version);
 #if defined(Q_OS_MACX)
     SInt32 major;
     SInt32 minor;
@@ -227,7 +239,7 @@ QMap<uint32_t, QString> System::listUsbDevices(void)
     QMap<uint32_t, QString> usbids;
     // usb pid detection
     qDebug() << "[System] Searching for USB devices";
-#if defined(Q_OS_LINUX) || defined(Q_OS_MACX)
+#if defined(Q_OS_LINUX)
 #if defined(LIBUSB1)
     libusb_device **devs;
     int res;
@@ -313,6 +325,84 @@ QMap<uint32_t, QString> System::listUsbDevices(void)
 #endif
 #endif
 
+#if defined(Q_OS_MACX)
+    kern_return_t result = KERN_FAILURE;
+    CFMutableDictionaryRef usb_matching_dictionary;
+    io_iterator_t usb_iterator = IO_OBJECT_NULL;
+    usb_matching_dictionary = IOServiceMatching(kIOUSBDeviceClassName);
+    result = IOServiceGetMatchingServices(kIOMasterPortDefault, usb_matching_dictionary,
+                                          &usb_iterator);
+    if(result) {
+        qDebug() << "[System] USB: IOKit: Could not get matching services.";
+        return usbids;
+    }
+
+    io_object_t usbCurrentObj;
+    while((usbCurrentObj = IOIteratorNext(usb_iterator))) {
+        uint32_t id;
+        QString name;
+        /* get vendor ID */
+        CFTypeRef vidref = NULL;
+        int vid = 0;
+        vidref = IORegistryEntryCreateCFProperty(usbCurrentObj, CFSTR("idVendor"),
+                                kCFAllocatorDefault, 0);
+        CFNumberGetValue((CFNumberRef)vidref, kCFNumberIntType, &vid);
+        CFRelease(vidref);
+
+        /* get product ID */
+        CFTypeRef pidref = NULL;
+        int pid = 0;
+        pidref = IORegistryEntryCreateCFProperty(usbCurrentObj, CFSTR("idProduct"),
+                                kCFAllocatorDefault, 0);
+        CFNumberGetValue((CFNumberRef)pidref, kCFNumberIntType, &pid);
+        CFRelease(pidref);
+        id = vid << 16 | pid;
+
+        /* get product vendor */
+        char vendor_buf[256];
+        CFIndex vendor_buflen = 256;
+        CFTypeRef vendor_name_ref = NULL;
+
+        vendor_name_ref = IORegistryEntrySearchCFProperty(usbCurrentObj,
+                                 kIOServicePlane, CFSTR("USB Vendor Name"),
+                                 kCFAllocatorDefault, 0);
+        if(vendor_name_ref != NULL) {
+            CFStringGetCString((CFStringRef)vendor_name_ref, vendor_buf, vendor_buflen,
+                               kCFStringEncodingUTF8);
+            name += QString::fromUtf8(vendor_buf) + " ";
+            CFRelease(vendor_name_ref);
+        }
+        else {
+            name += QObject::tr("(unknown vendor name) ");
+        }
+
+        /* get product name */
+        char product_buf[256];
+        CFIndex product_buflen = 256;
+        CFTypeRef product_name_ref = NULL;
+
+        product_name_ref = IORegistryEntrySearchCFProperty(usbCurrentObj,
+                                kIOServicePlane, CFSTR("USB Product Name"),
+                                kCFAllocatorDefault, 0);
+        if(product_name_ref != NULL) {
+            CFStringGetCString((CFStringRef)product_name_ref, product_buf, product_buflen,
+                               kCFStringEncodingUTF8);
+            name += QString::fromUtf8(product_buf);
+            CFRelease(product_name_ref);
+        }
+        else {
+            name += QObject::tr("(unknown product name)");
+        }
+
+        if(id) {
+            usbids.insert(id, name);
+            qDebug() << "[System] USB:" << QString("0x%1").arg(id, 8, 16) << name;
+        }
+
+    }
+    IOObjectRelease(usb_iterator);
+#endif
+
 #if defined(Q_OS_WIN32)
     HDEVINFO deviceInfo;
     SP_DEVINFO_DATA infoData;
@@ -336,20 +426,7 @@ QMap<uint32_t, QString> System::listUsbDevices(void)
         // get device desriptor first
         // for some reason not doing so results in bad things (tm)
         while(!SetupDiGetDeviceRegistryProperty(deviceInfo, &infoData,
-            SPDRP_DEVICEDESC,&data, (PBYTE)buffer, buffersize, &buffersize)) {
-            if(GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
-                if(buffer) free(buffer);
-                // double buffer size to avoid problems as per KB888609
-                buffer = (LPTSTR)malloc(buffersize * 2);
-            }
-            else {
-                break;
-            }
-        }
-
-        // now get the hardware id, which contains PID and VID.
-        while(!SetupDiGetDeviceRegistryProperty(deviceInfo, &infoData,
-            SPDRP_LOCATION_INFORMATION,&data, (PBYTE)buffer, buffersize, &buffersize)) {
+            SPDRP_DEVICEDESC, &data, (PBYTE)buffer, buffersize, &buffersize)) {
             if(GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
                 if(buffer) free(buffer);
                 // double buffer size to avoid problems as per KB888609
@@ -361,8 +438,9 @@ QMap<uint32_t, QString> System::listUsbDevices(void)
         }
         description = QString::fromWCharArray(buffer);
 
+        // now get the hardware id, which contains PID and VID.
         while(!SetupDiGetDeviceRegistryProperty(deviceInfo, &infoData,
-            SPDRP_HARDWAREID,&data, (PBYTE)buffer, buffersize, &buffersize)) {
+            SPDRP_HARDWAREID, &data, (PBYTE)buffer, buffersize, &buffersize)) {
             if(GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
                 if(buffer) free(buffer);
                 // double buffer size to avoid problems as per KB888609
@@ -374,7 +452,11 @@ QMap<uint32_t, QString> System::listUsbDevices(void)
         }
 
         unsigned int vid, pid;
-        if(_stscanf(buffer, _TEXT("USB\\Vid_%x&Pid_%x"), &vid, &pid) == 2) {
+        // convert buffer text to upper case to avoid depending on the case of
+        // the keys (W7 uses different casing than XP at least).
+        int len = _tcslen(buffer);
+        while(len--) buffer[len] = _totupper(buffer[len]);
+        if(_stscanf(buffer, _TEXT("USB\\VID_%x&PID_%x"), &vid, &pid) == 2) {
             uint32_t id;
             id = vid << 16 | pid;
             usbids.insert(id, description);
@@ -427,33 +509,40 @@ QUrl System::systemProxy(void)
     CFDictionaryRef dictref;
     CFStringRef stringref;
     CFNumberRef numberref;
-    int enable;
-    int port;
+    int enable = 0;
+    int port = 0;
     unsigned int bufsize = 0;
     char *buf;
     QUrl proxy;
 
     dictref = SCDynamicStoreCopyProxies(NULL);
-    stringref = (CFStringRef)CFDictionaryGetValue(dictref, kSCPropNetProxiesHTTPProxy);
+    if(dictref == NULL)
+        return proxy;
     numberref = (CFNumberRef)CFDictionaryGetValue(dictref, kSCPropNetProxiesHTTPEnable);
-    CFNumberGetValue(numberref, kCFNumberIntType, &enable);
+    if(numberref != NULL)
+        CFNumberGetValue(numberref, kCFNumberIntType, &enable);
     if(enable == 1) {
-        // get number of characters. CFStringGetLength uses UTF-16 code pairs
-        bufsize = CFStringGetLength(stringref) * 2 + 1;
-        buf = (char*)malloc(sizeof(char) * bufsize);
-        if(buf == NULL) {
-            qDebug() << "[System] can't allocate memory for proxy string!";
-            CFRelease(dictref);
-            return QUrl("");
-        }
-        CFStringGetCString(stringref, buf, bufsize, kCFStringEncodingUTF16);
-        numberref = (CFNumberRef)CFDictionaryGetValue(dictref, kSCPropNetProxiesHTTPPort);
-        CFNumberGetValue(numberref, kCFNumberIntType, &port);
-        proxy.setScheme("http");
-        proxy.setHost(QString::fromUtf16((unsigned short*)buf));
-        proxy.setPort(port);
+        // get proxy string
+        stringref = (CFStringRef)CFDictionaryGetValue(dictref, kSCPropNetProxiesHTTPProxy);
+        if(stringref != NULL) {
+            // get number of characters. CFStringGetLength uses UTF-16 code pairs
+            bufsize = CFStringGetLength(stringref) * 2 + 1;
+            buf = (char*)malloc(sizeof(char) * bufsize);
+            if(buf == NULL) {
+                qDebug() << "[System] can't allocate memory for proxy string!";
+                CFRelease(dictref);
+                return QUrl("");
+            }
+            CFStringGetCString(stringref, buf, bufsize, kCFStringEncodingUTF16);
+            numberref = (CFNumberRef)CFDictionaryGetValue(dictref, kSCPropNetProxiesHTTPPort);
+            if(numberref != NULL)
+                CFNumberGetValue(numberref, kCFNumberIntType, &port);
+            proxy.setScheme("http");
+            proxy.setHost(QString::fromUtf16((unsigned short*)buf));
+            proxy.setPort(port);
 
-        free(buf);
+            free(buf);
+            }
     }
     CFRelease(dictref);
 

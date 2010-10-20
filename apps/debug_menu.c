@@ -122,6 +122,10 @@
 #include "usb_core.h"    
 #endif
 
+#if defined(IPOD_ACCESSORY_PROTOCOL)
+#include "iap.h"
+#endif
+
 /*---------------------------------------------------*/
 /*    SPECIAL DEBUG STUFF                            */
 /*---------------------------------------------------*/
@@ -460,7 +464,7 @@ static bool dbg_flash_id(unsigned* p_manufacturer, unsigned* p_device,
 }
 #endif /* (CONFIG_CPU == SH7034 || CPU_COLDFIRE) */
 
-#ifndef SIMULATOR
+#if (CONFIG_PLATFORM & PLATFORM_NATIVE)
 #ifdef CPU_PP
 static int perfcheck(void)
 {
@@ -756,7 +760,7 @@ static bool dbg_hw_info(void)
     return false;
 }
 #endif /* !HAVE_LCD_BITMAP */
-#endif /* !SIMULATOR */
+#endif /* PLATFORM_NATIVE */
 
 #if (CONFIG_PLATFORM & PLATFORM_NATIVE)
 static const char* dbg_partitions_getname(int selected_item, void *data,
@@ -1182,7 +1186,7 @@ bool dbg_ports(void)
 #endif
 
 #if defined(IPOD_ACCESSORY_PROTOCOL)
-extern unsigned char serbuf[];
+        const unsigned char *serbuf = iap_get_serbuf();
         lcd_putsf(0, line++, "IAP PACKET: %02x %02x %02x %02x %02x %02x %02x %02x", 
          serbuf[0], serbuf[1], serbuf[2], serbuf[3], serbuf[4], serbuf[5],
          serbuf[6], serbuf[7]);
@@ -1262,7 +1266,6 @@ extern unsigned char serbuf[];
 #else /* !HAVE_LCD_BITMAP */
 bool dbg_ports(void)
 {
-    char buf[32];
     int button;
     int adc_battery_voltage;
     int currval = 0;
@@ -1271,40 +1274,14 @@ bool dbg_ports(void)
 
     while(1)
     {
-        switch(currval)
-        {
-        case 0:
-            snprintf(buf, 32, "PADR: %04x", (unsigned short)PADR);
-            break;
-        case 1:
-            snprintf(buf, 32, "PBDR: %04x", (unsigned short)PBDR);
-            break;
-        case 2:
-            snprintf(buf, 32, "AN0: %03x", adc_read(0));
-            break;
-        case 3:
-            snprintf(buf, 32, "AN1: %03x", adc_read(1));
-            break;
-        case 4:
-            snprintf(buf, 32, "AN2: %03x", adc_read(2));
-            break;
-        case 5:
-            snprintf(buf, 32, "AN3: %03x", adc_read(3));
-            break;
-        case 6:
-            snprintf(buf, 32, "AN4: %03x", adc_read(4));
-            break;
-        case 7:
-            snprintf(buf, 32, "AN5: %03x", adc_read(5));
-            break;
-        case 8:
-            snprintf(buf, 32, "AN6: %03x", adc_read(6));
-            break;
-        case 9:
-            snprintf(buf, 32, "AN7: %03x", adc_read(7));
-            break;
+        if (currval == 0) {
+            lcd_putsf(0, 0, "PADR: %04x", (unsigned short)PADR);
+        } else if (currval == 1) {
+            lcd_putsf(0, 0, "PBDR: %04x", (unsigned short)PBDR);
+        } else {
+            int idx = currval - 2; /* idx < 7 */
+            lcd_putsf(0, 0, "AN%d: %03x", idx, adc_read(idx));
         }
-        lcd_puts(0, 0, buf);
 
         battery_read_info(&adc_battery_voltage, NULL);
         lcd_putsf(0, 1, "Batt: %d.%03dV", adc_battery_voltage / 1000,
@@ -1504,10 +1481,11 @@ static bool tsc2100_debug(void)
 #define BAT_LAST_VAL  MIN(LCD_WIDTH, POWER_HISTORY_LEN)
 #define BAT_YSPACE    (LCD_HEIGHT - 20)
 
+
 static bool view_battery(void)
 {
     int view = 0;
-    int i, x, y;
+    int i, x, y, y1, y2, grid, graph;
     unsigned short maxv, minv;
 
     lcd_setfont(FONT_SYSFIXED);
@@ -1526,23 +1504,64 @@ static bool view_battery(void)
                     if (power_history[i] < minv)
                         minv = power_history[i];
                 }
-
-                lcd_putsf(0, 0, "Battery %d.%03d", power_history[0] / 1000,
+                
+                /* adjust grid scale */ 
+                if ((maxv - minv) > 50)
+                    grid = 50;
+                else
+                    grid = 5;
+                
+                /* print header */                
+                lcd_putsf(0, 0, "battery %d.%03dV", power_history[0] / 1000,
                          power_history[0] % 1000);
-                lcd_putsf(0, 1, "scale %d.%03d-%d.%03dV",
-                         minv / 1000, minv % 1000, maxv / 1000, maxv % 1000);
+                lcd_putsf(0, 1, "%d.%03d-%d.%03dV (%2dmV)",
+                          minv / 1000, minv % 1000, maxv / 1000, maxv % 1000,
+                          grid);
+                
+                i = 1;
+                while ((y = (minv - (minv % grid)+i*grid)) < maxv)
+                {
+                    graph = ((y-minv)*BAT_YSPACE)/(maxv-minv);
+                    graph = LCD_HEIGHT-1 - graph;
+             
+                    /* draw dotted horizontal grid line */      
+                    for (x=0; x<LCD_WIDTH;x=x+2)
+                        lcd_drawpixel(x,graph);
 
-                x = 0;
-                for (i = BAT_LAST_VAL - 1; i >= 0; i--) {
-                    y = (power_history[i] - minv) * BAT_YSPACE / (maxv - minv);
-                    lcd_set_drawmode(DRMODE_SOLID|DRMODE_INVERSEVID);
-                    lcd_vline(x, LCD_HEIGHT-1, 20);
-                    lcd_set_drawmode(DRMODE_SOLID);
-                    lcd_vline(x, LCD_HEIGHT-1,
-                              MIN(MAX(LCD_HEIGHT-1 - y, 20), LCD_HEIGHT-1));
-                    x++;
+                    i++;
                 }
+                
+                x = 0;
+                /* draw plot of power history
+                 * skip empty entries
+                 */
+                for (i = BAT_LAST_VAL - 1; i > 0; i--) 
+                {
+                    if (power_history[i] && power_history[i-1])
+                    {
+                        y1 = (power_history[i] - minv) * BAT_YSPACE / 
+                            (maxv - minv);
+                        y1 = MIN(MAX(LCD_HEIGHT-1 - y1, 20), 
+                                 LCD_HEIGHT-1);
+                        y2 = (power_history[i-1] - minv) * BAT_YSPACE /
+                            (maxv - minv);
+                        y2 = MIN(MAX(LCD_HEIGHT-1 - y2, 20),
+                                 LCD_HEIGHT-1);
 
+                        lcd_set_drawmode(DRMODE_SOLID);
+
+                        /* make line thicker */
+                        lcd_drawline(((x*LCD_WIDTH)/(BAT_LAST_VAL)), 
+                                     y1, 
+                                     (((x+1)*LCD_WIDTH)/(BAT_LAST_VAL)), 
+                                     y2);
+                        lcd_drawline(((x*LCD_WIDTH)/(BAT_LAST_VAL))+1, 
+                                     y1+1, 
+                                     (((x+1)*LCD_WIDTH)/(BAT_LAST_VAL))+1, 
+                                     y2+1);
+                        x++;
+                    }
+                }
                 break;
 
             case 1: /* status: */
@@ -1586,12 +1605,10 @@ static bool view_battery(void)
                 lcd_putsf(0, 7, "Headphone: %s",
                          headphone ? "connected" : "disconnected");
 #ifdef IPOD_VIDEO
-                x = (adc_read(ADC_4066_ISTAT) * 2400) /
-#if MEM == 64
-                (1024 * 2);
-#else
-                (1024 * 3);
-#endif
+                if(probed_ramsize == 64)
+                    x = (adc_read(ADC_4066_ISTAT) * 2400) / (1024 * 2);
+                else
+                    x = (adc_read(ADC_4066_ISTAT) * 2400) / (1024 * 3);
                 lcd_putsf(0, 8, "Ibat: %d mA", x);
                 lcd_putsf(0, 9, "Vbat * Ibat: %d mW", x * y / 1000);
 #endif
@@ -2542,7 +2559,8 @@ static bool cpu_boost_log(void)
 }
 #endif
 
-#if (defined(HAVE_WHEEL_ACCELERATION) && (CONFIG_KEYPAD==IPOD_4G_PAD) && !defined(SIMULATOR))
+#if (defined(HAVE_WHEEL_ACCELERATION) && (CONFIG_KEYPAD==IPOD_4G_PAD) \
+     && !defined(IPOD_MINI) && !defined(SIMULATOR))
 extern bool wheel_is_touched;
 extern int old_wheel_value;
 extern int new_wheel_value;
@@ -2748,7 +2766,8 @@ static const struct the_menu_item menuitems[] = {
 #ifdef CPU_BOOST_LOGGING
         {"cpu_boost log",cpu_boost_log},
 #endif
-#if (defined(HAVE_WHEEL_ACCELERATION) && (CONFIG_KEYPAD==IPOD_4G_PAD) && !defined(SIMULATOR))
+#if (defined(HAVE_WHEEL_ACCELERATION) && (CONFIG_KEYPAD==IPOD_4G_PAD) \
+     && !defined(IPOD_MINI) && !defined(SIMULATOR))
         {"Debug scrollwheel", dbg_scrollwheel },
 #endif
     };

@@ -21,11 +21,9 @@
 
 #include "plugin.h"
 
-#ifdef HAVE_LCD_BITMAP
-
 #include "lib/playback_control.h"
 
-PLUGIN_HEADER
+
 
 /* what the minesweeper() function can return */
 enum minesweeper_status {
@@ -926,5 +924,3 @@ enum plugin_status plugin_start(const void* parameter)
 
     return PLUGIN_OK;
 }
-
-#endif

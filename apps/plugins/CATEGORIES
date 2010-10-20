@@ -73,6 +73,7 @@ ppmviewer,viewers
 properties,viewers
 random_folder_advance_config,apps
 remote_control,apps
+resistor,apps
 reversi,games
 robotfindskitten,games
 rockblox,games
@@ -84,6 +85,7 @@ rockpaint,apps
 search,viewers
 searchengine,viewers
 settings_dumper,apps
+shopper,viewers
 shortcuts_append,viewers
 shortcuts_view,viewers
 sliding_puzzle,games

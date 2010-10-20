@@ -37,13 +37,7 @@ static struct tv_preferences new_prefs;
 #ifdef HAVE_LCD_BITMAP
 static bool tv_horizontal_scrollbar_setting(void)
 {
-    static const struct opt_items names[] = {
-        {"No",  -1},
-        {"Yes", -1},
-    };
-
-    return rb->set_option("Horizontal Scrollbar", &new_prefs.horizontal_scrollbar, INT,
-                           names, 2, NULL);
+   return rb->set_bool("Horizontal Scrollbar", &new_prefs.horizontal_scrollbar);
 }
 #endif
 
@@ -79,13 +73,7 @@ MAKE_MENU(horizontal_scroll_menu, "Horizontal", NULL, Icon_NOICON,
 #ifdef HAVE_LCD_BITMAP
 static bool tv_vertical_scrollbar_setting(void)
 {
-    static const struct opt_items names[] = {
-        {"No",  -1},
-        {"Yes", -1},
-    };
-
-    return rb->set_option("Vertical Scrollbar", &new_prefs.vertical_scrollbar, INT,
-                           names, 2, NULL);
+    return rb->set_bool("Vertical Scrollbar", &new_prefs.vertical_scrollbar);
 }
 #endif
 
@@ -100,15 +88,9 @@ static bool tv_vertical_scroll_mode_setting(void)
                           names, 2, NULL);
 }
 
-static bool tv_page_mode_setting(void)
+static bool tv_overlap_page_mode_setting(void)
 {
-    static const struct opt_items names[] = {
-        {"No",  -1},
-        {"Yes", -1},
-    };
-
-    return rb->set_option("Overlap Pages", &new_prefs.page_mode, INT,
-                           names, 2, NULL);
+    return rb->set_bool("Overlap Pages", &new_prefs.overlap_page_mode);
 }
 
 static bool tv_autoscroll_speed_setting(void)
@@ -135,7 +117,7 @@ MENUITEM_FUNCTION(vertical_scrollbar_item, 0, "Scrollbar",
 #endif
 MENUITEM_FUNCTION(vertical_scroll_mode_item, 0, "Scroll Mode",
                   tv_vertical_scroll_mode_setting, NULL, NULL, Icon_NOICON);
-MENUITEM_FUNCTION(page_mode_item, 0, "Overlap Pages", tv_page_mode_setting,
+MENUITEM_FUNCTION(overlap_page_mode_item, 0, "Overlap Pages", tv_overlap_page_mode_setting,
                   NULL, NULL, Icon_NOICON);
 MENUITEM_FUNCTION(autoscroll_speed_item, 0, "Auto-Scroll Speed",
                   tv_autoscroll_speed_setting, NULL, NULL, Icon_NOICON);
@@ -146,7 +128,7 @@ MAKE_MENU(vertical_scroll_menu, "Vertical", NULL, Icon_NOICON,
 #ifdef HAVE_LCD_BITMAP
           &vertical_scrollbar_item,
 #endif
-          &vertical_scroll_mode_item, &page_mode_item, &autoscroll_speed_item,
+          &vertical_scroll_mode_item, &overlap_page_mode_item, &autoscroll_speed_item,
           &narrow_mode_item);
 
 /*                      */
@@ -219,32 +201,17 @@ static bool tv_alignment_setting(void)
 #ifdef HAVE_LCD_BITMAP
 static bool tv_header_setting(void)
 {
-    static const struct opt_items names[4] =
-    {
-        {"None",       -1},
-        {"File path",  -1},
-        {"Status bar", -1},
-        {"Both",       -1},
-    };
-
-    int len = (rb->global_settings->statusbar == STATUSBAR_TOP)? 4 : 2;
-    return rb->set_option("Show Header", &new_prefs.header_mode, INT,
-                         names, len, NULL);
+    return rb->set_bool("Show Header", &new_prefs.header_mode);
 }
 
 static bool tv_footer_setting(void)
 {
-    static const struct opt_items names[4] =
-    {
-        {"None",       -1},
-        {"Page Num",   -1},
-        {"Status bar", -1},
-        {"Both",       -1},
-    };
+    return rb->set_bool("Show Footer", &new_prefs.footer_mode);
+}
 
-    int len = (rb->global_settings->statusbar == STATUSBAR_BOTTOM)? 4 : 2;
-    return rb->set_option("Show Footer", &new_prefs.footer_mode, INT,
-                           names, len, NULL);
+static bool tv_statusbar_setting(void)
+{
+    return rb->set_bool("Show Statusbar", &new_prefs.statusbar);
 }
 
 static bool tv_font_setting(void)
@@ -319,6 +286,8 @@ MENUITEM_FUNCTION(header_item, 0, "Show Header", tv_header_setting,
                   NULL, NULL, Icon_NOICON);
 MENUITEM_FUNCTION(footer_item, 0, "Show Footer", tv_footer_setting,
                   NULL, NULL, Icon_NOICON);
+MENUITEM_FUNCTION(statusbar_item, 0, "Show Statusbar", tv_statusbar_setting,
+                  NULL, NULL, Icon_NOICON);
 MENUITEM_FUNCTION(font_item, 0, "Font", tv_font_setting,
                   NULL, NULL, Icon_NOICON);
 #endif
@@ -329,7 +298,7 @@ MAKE_MENU(option_menu, "Viewer Options", NULL, Icon_NOICON,
             &encoding_item, &word_wrap_item, &line_mode_item, &windows_item,
             &alignment_item,
 #ifdef HAVE_LCD_BITMAP
-            &header_item, &footer_item, &font_item,
+            &header_item, &footer_item, &font_item, &statusbar_item,
 #endif
             &scroll_menu, &indent_spaces_item);
 
@@ -359,7 +328,8 @@ unsigned tv_display_menu(void)
         case 1: /* change settings */
             tv_copy_preferences(&new_prefs);
             result = tv_options_menu();
-            tv_set_preferences(&new_prefs);
+            if (!tv_set_preferences(&new_prefs))
+                result = TV_MENU_RESULT_ERROR;
             break;
         case 2: /* playback control */
             playback_control(NULL);

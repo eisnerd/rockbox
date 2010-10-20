@@ -114,7 +114,6 @@ $releasenotes="/wiki/ReleaseNotes36";
     'ipodvideo' => {
         name => 'iPod Video 30GB',
         status => 3,
-        ram => 32,
     },
     'ipodvideo64mb' => {
         name => 'iPod Video 60/80GB',
@@ -123,7 +122,6 @@ $releasenotes="/wiki/ReleaseNotes36";
         manual => 'ipodvideo',
         voice => 'ipodvideo',
         configname => 'ipodvideo',
-        ram => 64,
     },
     'iriverh10' => {
         name => 'iriver H10 20GB',
@@ -225,12 +223,12 @@ $releasenotes="/wiki/ReleaseNotes36";
     },
     'sansac200v2' => {
         name => 'SanDisk Sansa c200 v2',
-        status => 1,
+        status => 2,
         icon => 'sansac200',
     },
     'sansaclip' => {
         name => 'SanDisk Sansa Clip v1',
-        status => 2,
+        status => 3,
     },
     'sansaclipv2' => {
         name => 'SanDisk Sansa Clip v2',
@@ -291,9 +289,9 @@ $releasenotes="/wiki/ReleaseNotes36";
         name => 'Creative Zen Vision:M 60GB',
         status => 1,
     },
-    'hd200' => {
+    'mpiohd200' => {
         name => 'MPIO HD200',
-        status => 1,
+        status => 2,
     },
 );
 

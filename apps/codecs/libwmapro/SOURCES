@@ -1,9 +1,4 @@
 wmaprodec.c
 wma.c
-dsputil.c
-mdct.c
-fft.c
-bitstream.c
-libavutil/log.c
-libavutil/mem.c
-libavutil/mathematics.c
+mdct_tables.c
+../lib/ffmpeg_bitstream.c

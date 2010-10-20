@@ -25,6 +25,7 @@
 #include "cpu.h"
 #include "stdbool.h"
 #include "kernel.h"
+#include "gcc_extensions.h" /* for LIKELY/UNLIKELY */
 
 extern void system_reboot (void);
 /* Called from any UIE handler and panicf - wait for a key and return
@@ -198,21 +199,17 @@ int get_cpu_boost_counter(void);
 #define TYPE_FROM_MEMBER(type, memberptr, membername) \
     ((type *)((intptr_t)(memberptr) - OFFSETOF(type, membername)))
 
-/* Use to give gcc hints on which branch is most likely taken */
-#if defined(__GNUC__) && __GNUC__ >= 3
-#define LIKELY(x)   __builtin_expect(!!(x), 1)
-#define UNLIKELY(x) __builtin_expect(!!(x), 0)
-#else
-#define LIKELY(x)   (x)
-#define UNLIKELY(x) (x)
-#endif
-
 /* returns index of first set bit or 32 if no bits are set */
 int find_first_set_bit(uint32_t val);
 
 static inline __attribute__((always_inline))
 uint32_t isolate_first_bit(uint32_t val)
     { return val & -val; }
+
+/* Functions to set and clear register or variable bits atomically */
+void bitmod32(volatile uint32_t *addr, uint32_t bits, uint32_t mask);
+void bitset32(volatile uint32_t *addr, uint32_t mask);
+void bitclr32(volatile uint32_t *addr, uint32_t mask);
 
 /* gcc 3.4 changed the format of the constraints */
 #if (__GNUC__ >= 3) && (__GNUC_MINOR__ > 3) || (__GNUC__ >= 4)
@@ -236,9 +233,10 @@ enum {
 #include "system-target.h"
 #elif defined(HAVE_SDL) /* SDL build */
 #include "system-sdl.h"
+#define NEED_GENERIC_BYTESWAPS
 #endif
 
-#if (CONFIG_PLATFORM & PLATFORM_HOSTED)
+#ifdef NEED_GENERIC_BYTESWAPS
 static inline uint16_t swap16(uint16_t value)
     /*
       result[15..8] = value[ 7..0];
@@ -271,7 +269,7 @@ static inline uint32_t swap_odd_even32(uint32_t value)
     return (t >> 8) | ((t ^ value) << 8);
 }
 
-#endif /* PLATFORM_HOSTED */
+#endif /* NEED_GENERIC_BYTESWAPS */
 
 #ifndef BIT_N
 #define BIT_N(n) (1U << (n))
@@ -284,16 +282,28 @@ static inline uint32_t swap_odd_even32(uint32_t value)
 
 /* Just define these as empty if not declared */
 #ifdef HAVE_CPUCACHE_INVALIDATE
+void cpucache_commit_discard(void);
+/* deprecated alias */
 void cpucache_invalidate(void);
 #else
+static inline void cpucache_commit_discard(void)
+{
+}
+/* deprecated alias */
 static inline void cpucache_invalidate(void)
 {
 }
 #endif
 
 #ifdef HAVE_CPUCACHE_FLUSH
+void cpucache_commit(void);
+/* deprecated alias */
 void cpucache_flush(void);
 #else
+static inline void cpucache_commit(void)
+{
+}
+/* deprecated alias */
 static inline void cpucache_flush(void)
 {
 }

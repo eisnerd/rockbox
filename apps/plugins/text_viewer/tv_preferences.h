@@ -23,10 +23,10 @@
 #ifndef PLUGIN_TEXT_VIEWER_PREFERENCES_H
 #define PLUGIN_TEXT_VIEWER_PREFERENCES_H
 
-/* scrollbar_mode */
 enum {
-    SB_OFF = 0,
-    SB_ON,
+    TV_CALLBACK_OK,
+    TV_CALLBACK_STOP,
+    TV_CALLBACK_ERROR,
 };
 
 /* word_mode */
@@ -47,29 +47,6 @@ enum {
 enum {
     AL_LEFT = 0,
     AL_RIGHT,
-};
-
-/* page_mode */
-enum {
-    PM_NO_OVERLAP = 0,
-    PM_OVERLAP,
-};
-
-/* header_mode */
-enum {
-    HD_NONE = 0,
-    HD_PATH,
-    HD_SBAR,
-    HD_BOTH,
-};
-
-/* footer_mode */
-enum {
-
-    FT_NONE = 0,
-    FT_PAGE,
-    FT_SBAR,
-    FT_BOTH,
 };
 
 /* horizontal_scroll_mode */
@@ -97,12 +74,12 @@ struct tv_preferences {
 
     unsigned encoding;
 
-    unsigned horizontal_scrollbar;
-    unsigned vertical_scrollbar;
+    bool horizontal_scrollbar;
+    bool vertical_scrollbar;
 
-    unsigned page_mode;
-    unsigned header_mode;
-    unsigned footer_mode;
+    bool overlap_page_mode;
+    bool header_mode;
+    bool footer_mode;
     unsigned horizontal_scroll_mode;
     unsigned vertical_scroll_mode;
 
@@ -113,6 +90,8 @@ struct tv_preferences {
     unsigned narrow_mode;
 
     unsigned indent_spaces;
+
+    bool statusbar;
 
 #ifdef HAVE_LCD_BITMAP
     unsigned char font_name[MAX_PATH];
@@ -131,8 +110,12 @@ extern const struct tv_preferences * const preferences;
  *
  * [In] new_prefs
  *          new preferences
+ *
+ * return
+ *     true  success
+ *     false error
  */
-void tv_set_preferences(const struct tv_preferences *new_prefs);
+bool tv_set_preferences(const struct tv_preferences *new_prefs);
 
 /*
  * copy the preferences
@@ -156,6 +139,6 @@ void tv_set_default_preferences(struct tv_preferences *p);
  * [In] listner
  *          the function to be executed when the current preferences is changed
  */
-void tv_add_preferences_change_listner(void (*listner)(const struct tv_preferences *oldp));
+void tv_add_preferences_change_listner(int (*listner)(const struct tv_preferences *oldp));
 
 #endif

@@ -28,37 +28,45 @@
 #include "tv_settings.h"
 #include "tv_window.h"
 
-bool tv_init(const unsigned char *file)
+bool tv_init_action(unsigned char **buf, size_t *size)
 {
-    size_t size;
-
-    /* get the plugin buffer */
-    unsigned char *buf = rb->plugin_get_buffer(&size);
-
-    tv_init_bookmark();
-
-    /* initialize modules */
-    if (!tv_init_window(&buf, &size))
-        return false;
-
-    /* load the preferences and bookmark */
-    tv_load_settings(file);
-
-    /* select to read the page */
-    tv_select_bookmark();
-    return true;
+    /* initialize bookmarks and window modules */
+    return tv_init_bookmark(buf, size) && tv_init_window(buf, size);
 }
 
-void tv_exit(void *parameter)
+static void tv_finalize_action(void)
 {
-    (void)parameter;
+    /* save preference and bookmarks */
+    if (!tv_save_settings())
+        rb->splash(HZ, "Can't save preferences and bookmarks");
 
+    /* finalize bookmark modules */
+    tv_finalize_bookmark();
+
+    /* finalize window modules */
+    tv_finalize_window();
+}
+
+void tv_exit(void)
+{
     /* save preference and bookmarks */
     if (!tv_save_settings())
         rb->splash(HZ, "Can't save preferences and bookmarks");
 
     /* finalize modules */
-    tv_finalize_window();
+    tv_finalize_action();
+}
+
+bool tv_load_file(const unsigned char *file)
+{
+    /* load the preferences and bookmark */
+    if (!tv_load_settings(file))
+        return false;
+
+    /* select to read the page */
+    tv_select_bookmark();
+
+    return true;
 }
 
 void tv_draw(void)
@@ -83,7 +91,7 @@ void tv_scroll_up(unsigned mode)
     {
         offset_page--;
 #ifdef HAVE_LCD_BITMAP
-        offset_line = (preferences->page_mode == PM_OVERLAP)? 1:0;
+        offset_line = (preferences->overlap_page_mode)? 1:0;
 #endif
     }
     tv_move_screen(offset_page, offset_line, SEEK_CUR);
@@ -99,7 +107,7 @@ void tv_scroll_down(unsigned mode)
     {
         offset_page++;
 #ifdef HAVE_LCD_BITMAP
-        offset_line = (preferences->page_mode == PM_OVERLAP)? -1:0;
+        offset_line = (preferences->overlap_page_mode)? -1:0;
 #endif
     }
     tv_move_screen(offset_page, offset_line, SEEK_CUR);
@@ -166,8 +174,6 @@ unsigned tv_menu(void)
     if (res == TV_MENU_RESULT_EXIT_MENU)
     {
         tv_convert_fpos(cur_file_pos, &cur_pos);
-        if (preferences->vertical_scroll_mode == VS_PAGE)
-            cur_pos.line = 0;
 
         tv_move_screen(cur_pos.page, cur_pos.line, SEEK_SET);
     }

@@ -23,12 +23,9 @@
 #include "inttypes.h"
 #include "s5l8700.h"
 #include "power.h"
-#include "ftl-target.h"
-#include <string.h>
 #include "panic.h"
 #include "pmu-target.h"
-#include "lcd.h"
-
+#include "usb_core.h"   /* for usb_charging_maxcurrent_change */
 
 void power_off(void)
 {
@@ -48,7 +45,8 @@ void power_off(void)
 
 void power_init(void)
 {
-    pmu_write(0x1e, 15);  /* Vcore = 1.000V */
+    pmu_write(0x1e, 0xf);         /* Vcore = 1.000V */
+    pmu_ldo_set_voltage(2, 0x11); /* LCD   = 2.600V */
 }
 
 #if CONFIG_CHARGING

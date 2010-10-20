@@ -25,7 +25,7 @@
 #include <lib/configfile.h>
 #include "imageviewer.h"
 
-PLUGIN_HEADER
+
 
 #ifdef USEGSLIB
 GREY_INFO_STRUCT
@@ -97,7 +97,6 @@ static fb_data rgb_linebuf[LCD_WIDTH];  /* Line buffer for scrolling when
 #endif
 
 /* my memory pool (from the mp3 buffer) */
-static char print[32]; /* use a common snprintf() buffer */
 /* the remaining free part of the buffer for loaded+resized images */
 static unsigned char* buf;
 static size_t buf_size;
@@ -403,9 +402,6 @@ void cb_progress(int current, int total)
 
 #define VSCROLL (LCD_HEIGHT/8)
 #define HSCROLL (LCD_WIDTH/10)
-
-#define ZOOM_IN  100 /* return codes for below function */
-#define ZOOM_OUT 101
 
 /* Pan the viewing window right - move image to the left and fill in
    the right-hand side */
@@ -777,9 +773,7 @@ static int load_and_show(char* filename, struct image_info *info)
 
         if(!running_slideshow)
         {
-            rb->snprintf(print, sizeof(print), "showing %dx%d",
-                            info->width, info->height);
-            rb->lcd_puts(0, 3, print);
+            rb->lcd_putsf(0, 3, "showing %dx%d", info->width, info->height);
             rb->lcd_update();
         }
 

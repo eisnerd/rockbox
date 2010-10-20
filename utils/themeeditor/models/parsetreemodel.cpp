@@ -35,16 +35,16 @@
 #include <iostream>
 
 ParseTreeModel::ParseTreeModel(const char* document, QObject* parent):
-        QAbstractItemModel(parent)
+        QAbstractItemModel(parent), sbsModel(0)
 {
     this->tree = skin_parse(document);
 
     if(tree)
-        this->root = new ParseTreeNode(tree);
+        this->root = new ParseTreeNode(tree, this);
     else
         this->root = 0;
 
-    scene = new QGraphicsScene();
+    scene = new RBScene();
 }
 
 
@@ -54,6 +54,8 @@ ParseTreeModel::~ParseTreeModel()
         delete root;
     if(tree)
         skin_free_tree(tree);
+    if(sbsModel)
+        sbsModel->deleteLater();
 }
 
 QString ParseTreeModel::genCode()
@@ -72,16 +74,12 @@ QString ParseTreeModel::changeTree(const char *document)
     {
         QString error = tr("Error on line ") +
                         QString::number(skin_error_line())
+                        + tr(", column ") + QString::number(skin_error_col())
                         + tr(": ") + QString(skin_error_message());
         return error;
     }
 
-    ParseTreeNode* temp = new ParseTreeNode(test);
-    if(root && temp->genHash() == root->genHash())
-    {
-        delete temp;
-        return tr("Document Parses Successfully");
-    }
+    ParseTreeNode* temp = new ParseTreeNode(test, this);
 
     if(root)
     {
@@ -251,8 +249,8 @@ bool ParseTreeModel::setData(const QModelIndex &index, const QVariant &value,
             if(!value.canConvert(QVariant::Int))
                 return false;
 
-            param->type = skin_tag_parameter::NUMERIC;
-            param->data.numeric = value.toInt();
+            param->type = skin_tag_parameter::INTEGER;
+            param->data.number = value.toInt();
         }
         else
         {
@@ -274,8 +272,9 @@ bool ParseTreeModel::setData(const QModelIndex &index, const QVariant &value,
     return true;
 }
 
-QGraphicsScene* ParseTreeModel::render(ProjectModel* project,
-                                       const QString* file)
+RBScene* ParseTreeModel::render(ProjectModel* project,
+                                       DeviceState* device,
+                                       SkinDocument* doc, const QString* file)
 {
     scene->clear();
 
@@ -295,6 +294,9 @@ QGraphicsScene* ParseTreeModel::render(ProjectModel* project,
         settings.insert("themebase", base.canonicalPath());
     }
 
+    /* Finding imagebase and determining remote/wps status */
+    bool remote = false;
+    bool wps = false;
     if(file)
     {
         QString skinFile = *file;
@@ -303,16 +305,62 @@ QGraphicsScene* ParseTreeModel::render(ProjectModel* project,
         skinFile.chop(skinFile.length() - skinFile.lastIndexOf("."));
         settings.insert("imagepath", settings.value("themebase","") + "/wps/" +
                         skinFile);
+
+        decomp = file->split(".");
+        QString extension = decomp.last();
+        if(extension[0] == 'r')
+            remote = true;
+        if(extension.right(3).toLower() == "wps"
+           || extension.right(3).toLower() == "fms")
+            wps = true;
     }
 
+    /* Rendering SBS, if necessary */
     RBScreen* screen = 0;
-    RBRenderInfo info(this, project, &settings, screen);
+    if(wps && device->data("rendersbs").toBool())
+    {
+        QString sbsFile = settings.value(remote ? "rsbs" : "sbs", "");
+        sbsFile.replace("/.rockbox" , settings.value("themebase",""));
+
+        if(QFile::exists(sbsFile))
+        {
+            QFile sbs(sbsFile);
+            sbs.open(QFile::ReadOnly | QFile::Text);
+
+            if(sbsModel)
+                sbsModel->deleteLater();
+            sbsModel = new ParseTreeModel(QString(sbs.readAll()).toAscii());
+
+            if(sbsModel->root != 0)
+            {
+                RBRenderInfo sbsInfo(sbsModel, project, doc, &settings, device,
+                                     screen);
+
+                screen = new RBScreen(sbsInfo, remote);
+                scene->addItem(screen);
+
+                sbsInfo = RBRenderInfo(sbsModel, project, doc, &settings,
+                                       device, screen);
+                sbsModel->root->render(sbsInfo);
+                screen->endSbsRender();
+
+                setChildrenUnselectable(screen);
+            }
+        }
+    }
+
+    RBRenderInfo info(this, project, doc, &settings, device, screen);
 
     /* Adding the screen */
-    screen = new RBScreen(info);
-    scene->addItem(screen);
+    if(!screen)
+    {
+        screen = new RBScreen(info, remote);
+        scene->addItem(screen);
+    }
 
-    info = RBRenderInfo(this, project, &settings, screen);
+    scene->setScreenSize(screen->boundingRect());
+
+    info = RBRenderInfo(this, project, doc,  &settings, device, screen);
 
 
     /* Rendering the tree */
@@ -320,4 +368,30 @@ QGraphicsScene* ParseTreeModel::render(ProjectModel* project,
         root->render(info);
 
     return scene;
+}
+
+void ParseTreeModel::paramChanged(ParseTreeNode *param)
+{
+    QModelIndex left = indexFromPointer(param);
+    QModelIndex right = createIndex(left.row(), 2, left.internalPointer());
+    emit dataChanged(left, right);
+}
+
+QModelIndex ParseTreeModel::indexFromPointer(ParseTreeNode *p)
+{
+    /* Recursively finding an index for an arbitrary pointer within the tree */
+    if(!p->getParent())
+        return QModelIndex();
+    return index(p->getRow(), 0, indexFromPointer(p->getParent()));
+}
+
+void ParseTreeModel::setChildrenUnselectable(QGraphicsItem *root)
+{
+    root->setFlag(QGraphicsItem::ItemIsSelectable, false);
+    root->setFlag(QGraphicsItem::ItemIsMovable, false);
+
+    QList<QGraphicsItem*> children = root->children();
+    for(QList<QGraphicsItem*>::iterator i = children.begin()
+        ; i != children.end(); i++)
+        setChildrenUnselectable(*i);
 }

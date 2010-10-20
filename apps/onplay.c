@@ -26,7 +26,6 @@
 
 #include "debug.h"
 #include "lcd.h"
-#include "dir.h"
 #include "file.h"
 #include "audio.h"
 #include "menu.h"
@@ -63,6 +62,7 @@
 #include "statusbar-skinned.h"
 #include "pitchscreen.h"
 #include "viewport.h"
+#include "filefuncs.h"
 
 static int context;
 static char* selected_file = NULL;
@@ -106,7 +106,7 @@ static int bookmark_menu_callback(int action,
         case ACTION_REQUEST_MENUITEM:
             if (this_item == &bookmark_load_menu_item)
             {
-                if (bookmark_exist() == 0)
+                if (!bookmark_exists())
                     return ACTION_EXIT_MENUITEM;
             }
             /* hide the bookmark menu if there is no playback */
@@ -484,14 +484,14 @@ static int remove_dir(char* dirname, int len)
         entry = readdir(dir);
         if (!entry)
             break;
-
+        struct dirinfo info = dir_get_info(dir, entry);
         dirname[dirlen] ='\0';
         /* inform the user which dir we're deleting */
         splash(0, dirname);
 
         /* append name to current directory */
         snprintf(dirname+dirlen, len-dirlen, "/%s", entry->d_name);
-        if (entry->attribute & ATTR_DIRECTORY)
+        if (info.attribute & ATTR_DIRECTORY)
         {   /* remove a subdirectory */
             if (!strcmp((char *)entry->d_name, ".") ||
                 !strcmp((char *)entry->d_name, ".."))
@@ -783,6 +783,7 @@ static bool clipboard_pastedirectory(char *src, int srclen, char *target,
         if (!entry)
             break;
 
+        struct dirinfo info = dir_get_info(srcdir, entry);
         /* append name to current directory */
         snprintf(src+srcdirlen, srclen-srcdirlen, "/%s", entry->d_name);
         snprintf(target+targetdirlen, targetlen-targetdirlen, "/%s",
@@ -790,7 +791,7 @@ static bool clipboard_pastedirectory(char *src, int srclen, char *target,
 
         DEBUGF("Copy %s to %s\n", src, target);
 
-        if (entry->attribute & ATTR_DIRECTORY)
+        if (info.attribute & ATTR_DIRECTORY)
         {   /* copy/move a subdirectory */
             if (!strcmp((char *)entry->d_name, ".") ||
                 !strcmp((char *)entry->d_name, ".."))
@@ -1016,7 +1017,7 @@ MENUITEM_FUNCTION(add_to_faves_item, MENU_FUNC_USEPARAM, ID2P(LANG_ADD_TO_FAVES)
 #if LCD_DEPTH > 1
 static bool set_backdrop(void)
 {
-    /* load the image */
+    /* load the image 
     if(sb_set_backdrop(SCREEN_MAIN, selected_file)) {
         splash(HZ, str(LANG_BACKDROP_LOADED));
         set_file(selected_file, (char *)global_settings.backdrop_file,
@@ -1025,7 +1026,10 @@ static bool set_backdrop(void)
     } else {
         splash(HZ, str(LANG_BACKDROP_FAILED));
         return false;
-    }
+    }*/
+    set_file(selected_file, (char *)global_settings.backdrop_file,
+        MAX_FILENAME);
+    skin_backdrop_load_setting();
     return true;
 }
 MENUITEM_FUNCTION(set_backdrop_item, 0, ID2P(LANG_SET_AS_BACKDROP),
@@ -1041,6 +1045,16 @@ static bool set_recdir(void)
 MENUITEM_FUNCTION(set_recdir_item, 0, ID2P(LANG_SET_AS_REC_DIR),
                   set_recdir, NULL, clipboard_callback, Icon_Recording);
 #endif
+static bool set_startdir(void)
+{
+    snprintf(global_settings.start_directory, 
+             sizeof(global_settings.start_directory),
+             "%s/", selected_file);
+    settings_save();
+    return false;
+}
+MENUITEM_FUNCTION(set_startdir_item, 0, ID2P(LANG_SET_AS_START_DIR),
+                  set_startdir, NULL, clipboard_callback, Icon_file_view_menu);
 
 static int clipboard_callback(int action,const struct menu_item_ex *this_item)
 {
@@ -1093,7 +1107,8 @@ static int clipboard_callback(int action,const struct menu_item_ex *this_item)
                 else if ((selected_file_attr & ATTR_DIRECTORY))
                 {
                     /* only for directories */
-                    if (this_item == &delete_dir_item
+                    if (this_item == &delete_dir_item ||
+                        this_item == &set_startdir_item
 #ifdef HAVE_RECORDING
                      || this_item == &set_recdir_item
 #endif
@@ -1158,7 +1173,7 @@ MAKE_ONPLAYMENU( tree_onplay_menu, ID2P(LANG_ONPLAY_MENU_TITLE),
 #ifdef HAVE_RECORDING
            &set_recdir_item,
 #endif
-           &add_to_faves_item,
+           &set_startdir_item, &add_to_faves_item,
          );
 static int onplaymenu_callback(int action,const struct menu_item_ex *this_item)
 {

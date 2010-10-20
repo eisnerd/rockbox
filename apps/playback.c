@@ -48,6 +48,7 @@
 #include "metadata.h"
 #include "splash.h"
 #include "talk.h"
+#include "panic.h"
 
 #ifdef HAVE_RECORDING
 #include "pcm_record.h"
@@ -1113,6 +1114,7 @@ static bool audio_loadcodec(bool start_play)
    actually loaded by the buffering thread. */
 static bool audio_load_track(size_t offset, bool start_play)
 {
+    char name_buf[MAX_PATH + 1];
     const char *trackname;
     int fd = -1;
 
@@ -1140,7 +1142,8 @@ static bool audio_load_track(size_t offset, bool start_play)
 
     logf("Buffering track: r%d/w%d", track_ridx, track_widx);
     /* Get track name from current playlist read position. */
-    while ((trackname = playlist_peek(last_peek_offset)) != NULL)
+    while ((trackname = playlist_peek(last_peek_offset, name_buf,
+        sizeof(name_buf))) != NULL)
     {
         /* Handle broken playlists. */
         fd = open(trackname, O_RDONLY);
@@ -1860,12 +1863,8 @@ static void audio_reset_buffer(void)
 
     /* Subtract whatever the pcm buffer says it used plus the guard buffer */
     const size_t pcmbuf_size = pcmbuf_init(filebuf + filebuflen) +GUARD_BUFSIZE;
-
-#ifdef DEBUG
     if(pcmbuf_size > filebuflen)
-        panicf("Not enough memory for pcmbuf_init() : %d > %d",
-                (int)pcmbuf_size, (int)filebuflen);
-#endif
+        panicf("%s(): EOM (%zu > %zu)", __func__, pcmbuf_size, filebuflen);
 
     filebuflen -= pcmbuf_size;
 
